@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (credentials: { username: string; password: string }) => {
     const res = await api.login(credentials)
     setUser(res.user)
-    router.push("/dashboard")
+    router.push("/")
   }
 
   const register = async (payload: {
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     const res = await api.register(payload)
     setUser(res.user)
-    router.push("/dashboard")
+    router.push("/")
   }
 
   const logout = async () => {

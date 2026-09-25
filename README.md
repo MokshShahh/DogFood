@@ -79,13 +79,46 @@ On initial startup, `backend/entrypoint.sh` automatically seeds the default admi
 
 ---
 
-##  Local Testing & Verification
+## 📡 REST API Reference
+
+### Authentication
+| Endpoint | Method | Permission | Description |
+|---|---|---|---|
+| `/api/auth/register/` | POST | Public | Register new account (`participant` or `organizer` only). Sets HttpOnly cookies. |
+| `/api/auth/login/` | POST | Public | Authenticate with username/email and password. Sets HttpOnly cookies. |
+| `/api/auth/refresh/` | POST | Public | Rotates access token using HttpOnly refresh cookie. |
+| `/api/auth/logout/` | POST | Public | Invalidates token and clears HttpOnly cookies. |
+| `/api/auth/me/` | GET | Authenticated | Returns authenticated user profile and assigned role. |
+| `/api/auth/users/` | GET | Admin Only | Lists all registered platform users. |
+| `/api/auth/users/<id>/appoint-judge/` | POST | Admin Only | Appoints the specified user as a Judge. |
+
+### Events & Teams
+| Endpoint | Method | Permission | Description |
+|---|---|---|---|
+| `/api/events/` | GET | Public | List all active hackathon events. |
+| `/api/events/` | POST | Organizer / Admin | Create a new hackathon event (supports banner upload). |
+| `/api/events/<id>/` | GET | Public | Retrieve full event details + user's current team. |
+| `/api/events/<id>/teams/create/` | POST | Authenticated | Create a team for this event and receive a shareable team code. |
+| `/api/events/<id>/teams/join/` | POST | Authenticated | Join a team in this event using an 8-character team code. |
+| `/api/events/<id>/teams/leave/` | POST | Authenticated | Leave current team for this event. |
+
+### Project Submissions
+| Endpoint | Method | Permission | Description |
+|---|---|---|---|
+| `/api/events/<id>/my-submission/` | GET | Authenticated (Team Member) | Retrieve team's project submission. |
+| `/api/events/<id>/submit/` | POST | Authenticated (Team Leader) | Create or update project submission before event deadline (multipart form). |
+| `/api/events/<id>/submissions/` | GET | Organizer / Judge / Admin | List all project submissions for evaluation and scoring. |
+
+
+---
+
+## 🧪 Local Testing & Verification
 
 To run backend tests locally:
 
 ```bash
 cd backend
-python manage.py test users
+python manage.py test events users
 ```
 
 To run frontend checks:

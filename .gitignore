@@ -8,6 +8,7 @@ __pycache__/
 *.sqlite3
 staticfiles/
 *.log
+backend/media/
 
 # Node / Next.js
 frontend/node_modules/
