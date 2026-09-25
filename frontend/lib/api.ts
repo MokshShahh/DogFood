@@ -106,6 +106,7 @@ export interface Event {
   require_demo_url?: boolean
   require_presentation?: boolean
   submission_guidelines?: string
+  event_judges?: { id: number; username: string; email: string }[]
 }
 
 export async function apiRequest<T = any>(

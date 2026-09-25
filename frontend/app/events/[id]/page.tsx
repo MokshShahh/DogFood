@@ -7,10 +7,11 @@ import { Header } from "@/components/header"
 import { Squares } from "@/components/reactbits/squares"
 import { api, Event as EventType, Team, ProjectSubmission } from "@/lib/api"
 import { AdminEventDashboard } from "@/components/admin-event-dashboard"
-import { Edit2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   ArrowLeft,
   Calendar,
@@ -32,6 +33,11 @@ import {
   Video,
   Layers,
   ArrowRight,
+  Edit2,
+  Trophy,
+  Target,
+  FileText,
+  MapPin,
 } from "lucide-react"
 
 function GithubIcon({ className }: { className?: string }) {
@@ -199,6 +205,20 @@ export default function EventDetailPage({
     return `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
   }
 
+  const getEventStatus = () => {
+    if (!event) return { label: "Unknown", color: "text-muted-foreground", bg: "bg-muted/10", border: "border-border/30", dot: "bg-muted-foreground" }
+    const now = new Date()
+    const start = new Date(event.start_date)
+    const end = new Date(event.end_date)
+    if (now < start) {
+      return { label: "Upcoming", color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", dot: "bg-amber-400" }
+    } else if (now > end) {
+      return { label: "Concluded", color: "text-muted-foreground", bg: "bg-muted/20", border: "border-border/30", dot: "bg-muted-foreground" }
+    } else {
+      return { label: "Live & Ongoing", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", dot: "bg-emerald-400 animate-pulse" }
+    }
+  }
+
   if (loading) {
     return (
       <div className="relative min-h-screen flex flex-col bg-background font-mono select-none">
@@ -234,6 +254,35 @@ export default function EventDetailPage({
   }
 
   const bannerUrl = getMediaUrl(event.banner)
+  const eventStatus = getEventStatus()
+
+  const now = new Date()
+  const eventStart = new Date(event.start_date)
+  const eventEnd = new Date(event.end_date)
+  const totalDuration = eventEnd.getTime() - eventStart.getTime()
+  const elapsed = now.getTime() - eventStart.getTime()
+  const progressPercent = totalDuration > 0
+    ? Math.min(100, Math.max(0, Math.round((elapsed / totalDuration) * 100)))
+    : 0
+
+  const milestones = (event.phases && event.phases.length > 0)
+    ? event.phases.map((p, idx) => {
+        const pStart = new Date(p.start_date)
+        const pEnd = new Date(p.end_date)
+        const isPast = now > pEnd
+        const isCurrent = now >= pStart && now <= pEnd
+        const isUpcoming = now < pStart
+        return {
+          id: p.id || idx,
+          title: p.title,
+          startDate: pStart,
+          endDate: pEnd,
+          isPast,
+          isCurrent,
+          isUpcoming,
+        }
+      })
+    : []
 
   return (
     <div className="relative min-h-screen flex flex-col bg-background font-mono select-none overflow-hidden pb-16">
@@ -278,118 +327,589 @@ export default function EventDetailPage({
             ) : null}
 
             <div className="p-6 sm:p-8 space-y-6">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono uppercase tracking-wider">
+                  {/* Event Live Status Badge */}
+                  <Badge variant="outline" className={`font-mono text-[10px] uppercase tracking-wider py-0.5 px-2.5 ${eventStatus.color} ${eventStatus.bg} ${eventStatus.border}`}>
+                    <span className={`size-1.5 rounded-full mr-1.5 ${eventStatus.dot}`} />
+                    {eventStatus.label}
+                  </Badge>
+
+                  {/* Event Mode Badge */}
+                  <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-wider py-0.5 px-2.5 text-foreground bg-muted/20 border-border/40 flex items-center gap-1">
+                    {event.mode === "virtual" ? <Globe className="size-3" /> : <MapPin className="size-3" />}
                     {event.mode.replace("_", " ")}
                     {user?.role === "admin" && (
-                      <button onClick={() => {
-                        const newMode = prompt("Enter new mode (virtual, in_person, hybrid):", event.mode);
-                        if (newMode && ["virtual", "in_person", "hybrid"].includes(newMode) && newMode !== event.mode) {
-                          updateField("mode", newMode);
-                        } else if (newMode && !["virtual", "in_person", "hybrid"].includes(newMode)) {
-                          alert("Invalid mode. Must be virtual, in_person, or hybrid.");
-                        }
-                      }} className="ml-1 text-emerald-400/70 hover:text-emerald-400"><Edit2 className="size-3" /></button>
+                      <button
+                        onClick={() => {
+                          const newMode = prompt("Enter new mode (virtual, in_person, hybrid):", event.mode)
+                          if (newMode && ["virtual", "in_person", "hybrid"].includes(newMode) && newMode !== event.mode) {
+                            updateField("mode", newMode)
+                          } else if (newMode && !["virtual", "in_person", "hybrid"].includes(newMode)) {
+                            alert("Invalid mode. Must be virtual, in_person, or hybrid.")
+                          }
+                        }}
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit2 className="size-3" />
+                      </button>
                     )}
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted/30 px-2 py-0.5 rounded">
-                    Max Team Size: {event.max_team_size}
+                  </Badge>
+
+                  {/* Max Team Size Badge */}
+                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground py-0.5 px-2 bg-muted/20 border-border/30 flex items-center gap-1">
+                    <Users className="size-3" /> Max Team Size: {event.max_team_size}
                     {user?.role === "admin" && (
-                      <button onClick={() => {
-                        const newSize = prompt("Enter new max team size:", event.max_team_size.toString());
-                        if (newSize && !isNaN(Number(newSize)) && newSize !== event.max_team_size.toString()) {
-                          updateField("max_team_size", newSize);
-                        }
-                      }} className="ml-1 text-muted-foreground hover:text-foreground"><Edit2 className="size-3" /></button>
+                      <button
+                        onClick={() => {
+                          const newSize = prompt("Enter new max team size:", event.max_team_size.toString())
+                          if (newSize && !isNaN(Number(newSize)) && newSize !== event.max_team_size.toString()) {
+                            updateField("max_team_size", newSize)
+                          }
+                        }}
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit2 className="size-3" />
+                      </button>
                     )}
-                  </span>
+                  </Badge>
+
+                  {/* Teams Registered Badge */}
+                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground py-0.5 px-2 bg-muted/20 border-border/30">
+                    {event.teams_count || 0} {event.teams_count === 1 ? "Team" : "Teams"} Registered
+                  </Badge>
                 </div>
+
                 <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-foreground flex items-center gap-2">
                   {event.title}
                   {user?.role === "admin" && (
-                    <button onClick={() => handleEditField("title", event.title)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-5" /></button>
+                    <button
+                      onClick={() => handleEditField("title", event.title)}
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                      title="Edit Title"
+                    >
+                      <Edit2 className="size-4" />
+                    </button>
                   )}
                 </h1>
-                <p className="text-sm text-muted-foreground font-mono">
-                  Organized by <span className="text-foreground">@{event.created_by_username}</span>
-                </p>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
+                  <span>
+                    Organized by <span className="text-foreground font-medium">@{event.created_by_username}</span>
+                  </span>
+                  {event.created_at && (
+                    <span>• Created {new Date(event.created_at).toLocaleDateString()}</span>
+                  )}
+                </div>
               </div>
 
               {/* Event Metadata Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
                 <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 space-y-1">
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     <Calendar className="size-3" /> Timeline
                   </div>
                   <div className="text-sm text-foreground font-medium flex items-center justify-between">
-                    <span>
+                    <span className="truncate">
                       {new Date(event.start_date).toLocaleDateString()} – {new Date(event.end_date).toLocaleDateString()}
                     </span>
                     {user?.role === "admin" && (
-                      <button onClick={() => {
-                        const newStart = prompt("Enter new start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM):", event.start_date)
-                        if (newStart && newStart !== event.start_date) updateField("start_date", newStart)
-                        const newEnd = prompt("Enter new end date (YYYY-MM-DD or YYYY-MM-DDTHH:MM):", event.end_date)
-                        if (newEnd && newEnd !== event.end_date) updateField("end_date", newEnd)
-                      }} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                      <button
+                        onClick={() => {
+                          const newStart = prompt("Enter new start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM):", event.start_date)
+                          if (newStart && newStart !== event.start_date) updateField("start_date", newStart)
+                          const newEnd = prompt("Enter new end date (YYYY-MM-DD or YYYY-MM-DDTHH:MM):", event.end_date)
+                          if (newEnd && newEnd !== event.end_date) updateField("end_date", newEnd)
+                        }}
+                        className="text-muted-foreground hover:text-primary ml-1"
+                      >
+                        <Edit2 className="size-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
 
                 <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 space-y-1">
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <Globe className="size-3" /> Location
+                    <Globe className="size-3" /> Venue / Location
                   </div>
                   <div className="text-sm text-foreground font-medium truncate flex items-center justify-between">
-                    <span>{event.location}</span>
+                    <span className="truncate">{event.location || (event.mode === "virtual" ? "Virtual / Online" : "TBD")}</span>
                     {user?.role === "admin" && (
-                      <button onClick={() => handleEditField("location", event.location)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                      <button
+                        onClick={() => handleEditField("location", event.location)}
+                        className="text-muted-foreground hover:text-primary ml-1"
+                      >
+                        <Edit2 className="size-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
 
                 <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 space-y-1">
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <Award className="size-3" /> Prize Pool
+                    <Award className="size-3" /> Total Prize Pool
                   </div>
                   <div className="text-sm text-emerald-400 font-semibold truncate flex items-center justify-between">
-                    <span>{event.prize_pool || "Non-monetary / Certificates"}</span>
+                    <span className="truncate">{event.prize_pool || "Non-monetary / Certificates"}</span>
                     {user?.role === "admin" && (
-                      <button onClick={() => handleEditField("prize_pool", event.prize_pool)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                      <button
+                        onClick={() => handleEditField("prize_pool", event.prize_pool)}
+                        className="text-muted-foreground hover:text-primary ml-1"
+                      >
+                        <Edit2 className="size-3.5" />
+                      </button>
                     )}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 space-y-1">
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <Users className="size-3" /> Team Structure
+                  </div>
+                  <div className="text-sm text-foreground font-medium truncate">
+                    <span>Up to {event.max_team_size} members / team</span>
                   </div>
                 </div>
               </div>
 
               {/* Description */}
               <div className="space-y-2 border-t border-border/30 pt-6">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
                   Event Brief & Objectives
                   {user?.role === "admin" && (
-                    <button onClick={() => handleEditField("description", event.description)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                    <button
+                      onClick={() => handleEditField("description", event.description)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <Edit2 className="size-3.5" />
+                    </button>
                   )}
                 </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
                   {event.description}
                 </p>
               </div>
 
-              {/* Event Phases */}
-              {event.phases && event.phases.length > 0 && (
+              {/* Competition Tracks */}
+              {event.tracks && event.tracks.length > 0 && (
                 <div className="space-y-3 border-t border-border/30 pt-6">
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                    <Layers className="size-4" /> Hackathon Phases
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {event.phases.map((phase) => (
-                      <div key={phase.id} className="p-3.5 rounded-lg border border-border/30 bg-muted/10 space-y-1">
-                        <div className="text-sm font-semibold text-foreground truncate">
-                          {phase.title}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Target className="size-4 text-primary" />
+                      Competition Tracks ({event.tracks.length})
+                    </h3>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      Challenge Categories
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {event.tracks.map((track, idx) => (
+                      <div
+                        key={track.id || idx}
+                        className="p-4 rounded-lg border border-border/30 bg-muted/10 hover:border-border/60 transition-colors space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded border border-border/30">
+                              Track {idx + 1}
+                            </span>
+                            {track.title}
+                          </h4>
                         </div>
-                        <div className="text-[11px] text-muted-foreground font-mono flex items-center gap-1.5">
-                          <Calendar className="size-3" />
-                          {new Date(phase.start_date).toLocaleDateString()} – {new Date(phase.end_date).toLocaleDateString()}
+                        {track.description && (
+                          <p className="text-xs text-muted-foreground leading-relaxed font-sans">
+                            {track.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Prizes & Awards Breakdown */}
+              {event.prizes && event.prizes.length > 0 && (
+                <div className="space-y-3 border-t border-border/30 pt-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Trophy className="size-4 text-emerald-400" />
+                      Prizes & Recognition ({event.prizes.length})
+                    </h3>
+                    {event.prize_pool && (
+                      <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                        Total Pool: {event.prize_pool}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {event.prizes.map((prize, idx) => (
+                      <div
+                        key={prize.id || idx}
+                        className="p-4 rounded-lg border border-border/30 bg-muted/10 hover:border-emerald-500/30 transition-colors space-y-2 relative overflow-hidden"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider block">
+                              Award Tier #{idx + 1}
+                            </span>
+                            <h4 className="text-xs sm:text-sm font-semibold text-foreground mt-0.5">
+                              {prize.title}
+                            </h4>
+                          </div>
+                          <div className="size-7 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                            <Award className="size-4" />
+                          </div>
+                        </div>
+                        <div className="text-base sm:text-lg font-bold font-mono text-emerald-400">
+                          {prize.amount}
+                        </div>
+                        {prize.description && (
+                          <p className="text-xs text-muted-foreground leading-relaxed font-sans pt-1 border-t border-border/20">
+                            {prize.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Event Timeline & Phases Graph */}
+              {milestones.length > 0 && (
+                <div className="space-y-4 border-t border-border/30 pt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Layers className="size-4 text-primary" />
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                        Event Timeline & Phases Graph
+                      </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground border-border/40 bg-muted/20">
+                      {progressPercent}% Complete
+                    </Badge>
+                    {event.phases && event.phases.length > 0 && (
+                      <span className="text-[11px] text-muted-foreground font-mono hidden sm:inline">
+                        {event.phases.length} Phases
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Desktop Horizontal Graph View */}
+                <div className="hidden md:block space-y-4 pt-1">
+                  {/* Timeline progress line */}
+                  <div className="relative">
+                    <div className="h-1.5 w-full rounded-full bg-muted/20 overflow-hidden border border-border/20">
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500/70 to-emerald-400 rounded-full transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Connected Nodes Pipeline */}
+                  <div className="relative pt-4 pb-2">
+                    <div
+                      className="grid gap-3"
+                      style={{
+                        gridTemplateColumns: `repeat(${milestones.length}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {milestones.map((m, idx) => {
+                        const isLast = idx === milestones.length - 1
+                        return (
+                          <div key={m.id} className="relative flex flex-col items-center text-center px-1 group">
+                            {/* Connecting track to next node */}
+                            {!isLast && (
+                              <div
+                                className={`absolute top-4 left-1/2 w-full h-0.5 z-0 transition-colors ${
+                                  m.isPast
+                                    ? "bg-emerald-500/60"
+                                    : m.isCurrent
+                                    ? "bg-gradient-to-r from-emerald-500/60 to-border/40"
+                                    : "bg-border/40 border-t border-dashed border-border/60"
+                                }`}
+                              />
+                            )}
+
+                            {/* Node Marker */}
+                            <div className="relative z-10 mb-3 flex items-center justify-center">
+                              {m.isCurrent ? (
+                                <div className="relative flex items-center justify-center">
+                                  <span className="absolute -inset-1.5 rounded-full border border-emerald-400 animate-ping opacity-60" />
+                                  <div className="size-8 rounded-full bg-background border-2 border-emerald-400 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                                    <span className="size-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  </div>
+                                </div>
+                              ) : m.isPast ? (
+                                <div className="size-8 rounded-full bg-emerald-500/10 border-2 border-emerald-500/60 flex items-center justify-center text-emerald-400">
+                                  <Check className="size-4 stroke-[3]" />
+                                </div>
+                              ) : (
+                                <div className="size-8 rounded-full bg-muted/20 border-2 border-border/50 flex items-center justify-center text-[11px] font-mono text-muted-foreground">
+                                  0{idx + 1}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Milestone Card */}
+                            <div
+                              className={`w-full p-3 rounded-lg border transition-all space-y-1.5 ${
+                                m.isCurrent
+                                  ? "border-emerald-500/40 bg-emerald-500/10 shadow-xs ring-1 ring-emerald-500/20"
+                                  : m.isPast
+                                  ? "border-border/30 bg-muted/5 opacity-85 hover:opacity-100"
+                                  : "border-border/20 bg-muted/10"
+                              }`}
+                            >
+                              <div className="flex items-center justify-center">
+                                {m.isCurrent ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] uppercase tracking-wider text-emerald-400 border-emerald-500/30 bg-emerald-500/10 py-0 px-1.5"
+                                  >
+                                    Active Now
+                                  </Badge>
+                                ) : m.isPast ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] uppercase tracking-wider text-muted-foreground border-border/30 py-0 px-1.5"
+                                  >
+                                    Completed
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] uppercase tracking-wider text-amber-400 border-amber-500/30 bg-amber-500/10 py-0 px-1.5"
+                                  >
+                                    Upcoming
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <div className="text-xs font-semibold text-foreground truncate" title={m.title}>
+                                {m.title}
+                              </div>
+
+                              <div className="text-[10px] text-muted-foreground font-mono leading-tight">
+                                <div>{m.startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+                                {m.startDate.toDateString() !== m.endDate.toDateString() && (
+                                  <div className="text-[9px] text-muted-foreground/80">
+                                    to {m.endDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mobile Vertical Connected Track View */}
+                <div className="block md:hidden space-y-4 pt-1">
+                  {/* Progress Line */}
+                  <div className="h-1.5 w-full rounded-full bg-muted/20 overflow-hidden border border-border/20">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500/70 to-emerald-400 rounded-full"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+
+                  <div className="relative pl-6 space-y-4 border-l-2 border-border/30 ml-3">
+                    {milestones.map((m, idx) => (
+                      <div key={m.id} className="relative group">
+                        {/* Track node dot */}
+                        <div
+                          className={`absolute -left-[31px] top-1.5 size-4 rounded-full border-2 bg-background flex items-center justify-center ${
+                            m.isCurrent
+                              ? "border-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                              : m.isPast
+                              ? "border-emerald-500/60 bg-emerald-500/20"
+                              : "border-border/60"
+                          }`}
+                        >
+                          {m.isCurrent && <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />}
+                        </div>
+
+                        {/* Card */}
+                        <div
+                          className={`p-3 rounded-lg border space-y-1.5 ${
+                            m.isCurrent
+                              ? "border-emerald-500/40 bg-emerald-500/10"
+                              : m.isPast
+                              ? "border-border/30 bg-muted/5 opacity-85"
+                              : "border-border/20 bg-muted/10"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-foreground">
+                              {m.title}
+                            </span>
+                            {m.isCurrent ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] uppercase tracking-wider text-emerald-400 border-emerald-500/30 bg-emerald-500/10 py-0 px-1.5"
+                              >
+                                Active
+                              </Badge>
+                            ) : m.isPast ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] uppercase tracking-wider text-muted-foreground border-border/30 py-0 px-1.5"
+                              >
+                                Completed
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] uppercase tracking-wider text-amber-400 border-amber-500/30 bg-amber-500/10 py-0 px-1.5"
+                              >
+                                Upcoming
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground font-mono flex items-center gap-1.5">
+                            <Calendar className="size-3" />
+                            {m.startDate.toLocaleDateString()} – {m.endDate.toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Submission Deliverables & Requirements */}
+              <div className="space-y-4 border-t border-border/30 pt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <FileCode2 className="size-4 text-primary" />
+                    Submission Deliverables & Requirements
+                  </h3>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    Evaluation Criteria
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* GitHub Deliverable */}
+                  <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <GithubIcon className="size-4 text-foreground shrink-0" />
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">GitHub Repo</div>
+                        <div className="text-[10px] text-muted-foreground">Source code repository</div>
+                      </div>
+                    </div>
+                    {event.require_github_url ? (
+                      <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                        Required
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/40">
+                        Optional
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Demo Deliverable */}
+                  <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Video className="size-4 text-primary shrink-0" />
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">Demo / Video</div>
+                        <div className="text-[10px] text-muted-foreground">Live app or video link</div>
+                      </div>
+                    </div>
+                    {event.require_demo_url ? (
+                      <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                        Required
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/40">
+                        Optional
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Presentation Deliverable */}
+                  <div className="p-3.5 rounded-lg border border-border/30 bg-muted/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Presentation className="size-4 text-amber-400 shrink-0" />
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">Slide Deck</div>
+                        <div className="text-[10px] text-muted-foreground">Slides URL or PDF</div>
+                      </div>
+                    </div>
+                    {event.require_presentation ? (
+                      <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                        Required
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/40">
+                        Optional
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Submission Guidelines & Rules */}
+                {event.submission_guidelines && (
+                  <div className="p-4 rounded-lg border border-border/30 bg-muted/10 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <FileText className="size-3.5" />
+                      Organizer Guidelines & Evaluation Rubric
+                      {user?.role === "admin" && (
+                        <button
+                          onClick={() => handleEditField("submission_guidelines", event.submission_guidelines || "")}
+                          className="text-muted-foreground hover:text-primary ml-1"
+                        >
+                          <Edit2 className="size-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed font-sans">
+                      {event.submission_guidelines}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Judges / Evaluation Panel */}
+              {event.event_judges && event.event_judges.length > 0 && (
+                <div className="space-y-3 border-t border-border/30 pt-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <Shield className="size-4 text-primary" />
+                      Judging & Evaluation Panel ({event.event_judges.length})
+                    </h3>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      Project Reviewers
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {event.event_judges.map((judge) => (
+                      <div
+                        key={judge.id}
+                        className="p-3 rounded-lg border border-border/30 bg-muted/10 flex items-center gap-3"
+                      >
+                        <Avatar className="size-8 border border-border/40">
+                          <AvatarFallback className="text-[11px] font-mono font-semibold uppercase bg-muted/50">
+                            {judge.username.slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold text-foreground truncate">
+                            @{judge.username}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                            <Shield className="size-2.5 text-primary" /> Judge
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -413,11 +933,7 @@ export default function EventDetailPage({
             </div>
           )}
 
-          {user?.role === "admin" ? (
-            <AdminEventDashboard eventId={Number(eventId)} eventObj={event} refreshEvent={fetchEvent} />
-          ) : (
-            <>
-              {/* 1. PARTICIPATION & TEAM PORTAL */}
+          {/* 1. PARTICIPATION & TEAM PORTAL */}
           <div className="rounded-xl border border-border/40 bg-background/80 p-6 sm:p-8 backdrop-blur-md shadow-2xl space-y-6">
             <div className="flex items-center justify-between border-b border-border/30 pb-4">
               <div>
@@ -724,9 +1240,12 @@ export default function EventDetailPage({
               </div>
             </div>
           )}
-        
-            </>
-          )}</div>
+
+          {/* 3. ADMIN MANAGEMENT */}
+          {user?.role === "admin" && (
+            <AdminEventDashboard eventId={Number(eventId)} eventObj={event} refreshEvent={fetchEvent} />
+          )}
+        </div>
       </div>
     </div>
   )
