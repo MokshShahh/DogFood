@@ -1,0 +1,77 @@
+services:
+  # 1. Database Service (PostgreSQL)
+  db:
+    image: postgres:16-alpine
+    container_name: hackathon_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-hackathon_db}
+      POSTGRES_USER: ${DB_USER:-hackathon_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-hackathon_password}
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-hackathon_user} -d ${DB_NAME:-hackathon_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - hackathon_network
+
+  # 2. Backend Service (Django + DRF + HttpOnly JWT)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hackathon_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DEBUG: "${DEBUG:-False}"
+      SECRET_KEY: "${SECRET_KEY:-django-insecure-hackathon-offline-production-key-2026}"
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-hackathon_db}
+      DB_USER: ${DB_USER:-hackathon_user}
+      DB_PASSWORD: ${DB_PASSWORD:-hackathon_password}
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend,frontend,0.0.0.0"
+      SECURE_COOKIE: "False"
+      JWT_COOKIE_SAMESITE: "Lax"
+      DJANGO_SUPERUSER_USERNAME: ${ADMIN_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${ADMIN_EMAIL:-admin@hackathon.local}
+      DJANGO_SUPERUSER_PASSWORD: ${ADMIN_PASSWORD:-AdminPassword123!}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hackathon_network
+
+  # 3. Frontend Service (Next.js + Tailwind + Shadcn UI + React Bits)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hackathon_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - hackathon_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  hackathon_network:
+    driver: bridge
