@@ -75,6 +75,10 @@ export default function TeamSubmissionPage({
   const [subDemo, setSubDemo] = useState("")
   const [subPresentation, setSubPresentation] = useState("")
   const [subTechStack, setSubTechStack] = useState("")
+
+  const [subTrack, setSubTrack] = useState<number | "">( "")
+  const [isDraft, setIsDraft] = useState<boolean>(true)
+
   const [subFile, setSubFile] = useState<File | null>(null)
   const [isEditingSubmission, setIsEditingSubmission] = useState(false)
   const [submittingProject, setSubmittingProject] = useState(false)
@@ -136,6 +140,10 @@ export default function TeamSubmissionPage({
     setSubDemo(s.demo_url || "")
     setSubPresentation(s.presentation_url || "")
     setSubTechStack(s.tech_stack || "")
+
+    setSubTrack(s.track || "")
+    setIsDraft(s.is_draft)
+
   }
 
   useEffect(() => {
@@ -185,15 +193,19 @@ export default function TeamSubmissionPage({
       return
     }
 
-    if (
-      !subTitle.trim() ||
-      !subTagline.trim() ||
-      !subProblem.trim() ||
-      !subSolution.trim() ||
-      !subGithub.trim()
-    ) {
-      setSubmissionError("Please fill in all mandatory fields: Title, Tagline, Problem, Solution, and GitHub repository.")
-      return
+    if (!isDraft) {
+      if (
+        !subTitle.trim() ||
+        !subTagline.trim() ||
+        !subProblem.trim() ||
+        !subSolution.trim() ||
+        (event?.require_github_url && !subGithub.trim()) ||
+        (event?.require_demo_url && !subDemo.trim()) ||
+        (event?.require_presentation && !subPresentation.trim() && !subFile && !submission?.presentation_file)
+      ) {
+        setSubmissionError("Please fill in all mandatory fields before making a final submission.")
+        return
+      }
     }
 
     setSubmittingProject(true)
@@ -207,6 +219,10 @@ export default function TeamSubmissionPage({
       formData.append("demo_url", subDemo.trim())
       formData.append("presentation_url", subPresentation.trim())
       formData.append("tech_stack", subTechStack.trim())
+
+      formData.append("is_draft", isDraft ? "true" : "false")
+      if (subTrack) formData.append("track", subTrack.toString())
+
       if (subFile) {
         formData.append("presentation_file", subFile)
       }
@@ -576,12 +592,19 @@ export default function TeamSubmissionPage({
                         </Button>
                       )}
                     </div>
+                    
+                    {event?.submission_guidelines && (
+                      <div className="p-4 rounded-md border border-amber-500/30 bg-amber-500/5 text-xs text-amber-600/90 whitespace-pre-wrap leading-relaxed">
+                        <strong className="text-amber-600">Organizer Guidelines:</strong><br/>
+                        {event.submission_guidelines}
+                      </div>
+                    )}
 
                     {/* Project Title & Tagline */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <Label htmlFor="subTitle" className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                          Project Title *
+                          Project Title {!isDraft ? "*" : ""}
                         </Label>
                         <Input
                           id="subTitle"
@@ -589,13 +612,13 @@ export default function TeamSubmissionPage({
                           value={subTitle}
                           onChange={(e) => setSubTitle(e.target.value)}
                           className="h-9 text-xs font-mono bg-muted/20"
-                          required
+                          required={!isDraft}
                         />
                       </div>
 
                       <div className="space-y-1.5">
                         <Label htmlFor="subTagline" className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                          Tagline / One-Liner *
+                          Tagline / One-Liner {!isDraft ? "*" : ""}
                         </Label>
                         <Input
                           id="subTagline"
@@ -603,7 +626,7 @@ export default function TeamSubmissionPage({
                           value={subTagline}
                           onChange={(e) => setSubTagline(e.target.value)}
                           className="h-9 text-xs font-mono bg-muted/20"
-                          required
+                          required={!isDraft}
                         />
                       </div>
                     </div>
@@ -611,7 +634,7 @@ export default function TeamSubmissionPage({
                     {/* Problem Statement */}
                     <div className="space-y-1.5">
                       <Label htmlFor="subProblem" className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                        Problem Statement *
+                        Problem Statement {!isDraft ? "*" : ""}
                       </Label>
                       <textarea
                         id="subProblem"
@@ -620,14 +643,14 @@ export default function TeamSubmissionPage({
                         value={subProblem}
                         onChange={(e) => setSubProblem(e.target.value)}
                         className="w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        required
+                        required={!isDraft}
                       />
                     </div>
 
                     {/* Solution Description */}
                     <div className="space-y-1.5">
                       <Label htmlFor="subSolution" className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                        Solution & Architecture *
+                        Solution & Architecture {!isDraft ? "*" : ""}
                       </Label>
                       <textarea
                         id="subSolution"
@@ -636,7 +659,7 @@ export default function TeamSubmissionPage({
                         value={subSolution}
                         onChange={(e) => setSubSolution(e.target.value)}
                         className="w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        required
+                        required={!isDraft}
                       />
                     </div>
 
@@ -644,7 +667,7 @@ export default function TeamSubmissionPage({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <Label htmlFor="subGithub" className="text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                          <GithubIcon className="size-3" /> GitHub Repository Link *
+                          <GithubIcon className="size-3" /> GitHub Repository Link {(event?.require_github_url && !isDraft) ? "*" : "(Optional)"}
                         </Label>
                         <Input
                           id="subGithub"
@@ -653,13 +676,13 @@ export default function TeamSubmissionPage({
                           value={subGithub}
                           onChange={(e) => setSubGithub(e.target.value)}
                           className="h-9 text-xs font-mono bg-muted/20"
-                          required
+                          required={event?.require_github_url && !isDraft}
                         />
                       </div>
 
                       <div className="space-y-1.5">
                         <Label htmlFor="subDemo" className="text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                          <Video className="size-3" /> Live Demo URL (Optional)
+                          <Video className="size-3" /> Live Demo URL {(event?.require_demo_url && !isDraft) ? "*" : "(Optional)"}
                         </Label>
                         <Input
                           id="subDemo"
@@ -668,6 +691,7 @@ export default function TeamSubmissionPage({
                           value={subDemo}
                           onChange={(e) => setSubDemo(e.target.value)}
                           className="h-9 text-xs font-mono bg-muted/20"
+                          required={event?.require_demo_url && !isDraft}
                         />
                       </div>
                     </div>
@@ -676,7 +700,7 @@ export default function TeamSubmissionPage({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <Label htmlFor="subPresentation" className="text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                          <Presentation className="size-3" /> Presentation Slide Deck URL (Optional)
+                          <Presentation className="size-3" /> Presentation Slide Deck URL {(event?.require_presentation && !isDraft) ? "*" : "(Optional)"}
                         </Label>
                         <Input
                           id="subPresentation"
@@ -690,7 +714,7 @@ export default function TeamSubmissionPage({
 
                       <div className="space-y-1.5">
                         <Label htmlFor="subFile" className="text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                          <Upload className="size-3" /> Slide Deck File Upload (PDF, PPTX, KEY)
+                          <Upload className="size-3" /> Slide Deck File Upload (PDF, PPTX, KEY) {(event?.require_presentation && !isDraft) ? "*" : ""}
                         </Label>
                         <Input
                           id="subFile"
@@ -703,6 +727,11 @@ export default function TeamSubmissionPage({
                           <div className="text-[10px] text-muted-foreground">
                             Current file:{" "}
                             <span className="text-foreground">{submission.presentation_file.split("/").pop()}</span>
+                          </div>
+                        )}
+                        {(event?.require_presentation && !isDraft) && (
+                          <div className="text-[10px] text-amber-500/80">
+                            * Either URL or File upload is required.
                           </div>
                         )}
                       </div>
@@ -720,6 +749,39 @@ export default function TeamSubmissionPage({
                         onChange={(e) => setSubTechStack(e.target.value)}
                         className="h-9 text-xs font-mono bg-muted/20"
                       />
+                    </div>
+
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="subTrack" className="text-[11px] text-muted-foreground uppercase tracking-wider">
+                          Competition Track (Optional)
+                        </Label>
+                        <select
+                          id="subTrack"
+                          value={subTrack}
+                          onChange={(e) => setSubTrack(e.target.value ? Number(e.target.value) : "")}
+                          className="w-full h-9 rounded-md border border-input bg-muted/20 px-3 py-1 text-xs font-mono"
+                        >
+                          <option value="">-- No Track selected --</option>
+                          {event?.tracks?.map(t => (
+                            <option key={t.id} value={t.id}>{t.title}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5 flex items-center pt-5 gap-2">
+                        <input
+                          id="isDraft"
+                          type="checkbox"
+                          checked={isDraft}
+                          onChange={(e) => setIsDraft(e.target.checked)}
+                          className="size-4"
+                        />
+                        <Label htmlFor="isDraft" className="text-[11px] text-muted-foreground uppercase tracking-wider cursor-pointer">
+                          Save as Draft (Hide from Public Gallery)
+                        </Label>
+                      </div>
                     </div>
 
                     {/* Submit Actions */}

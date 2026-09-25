@@ -57,11 +57,11 @@ export function Header() {
           {user ? (
             <div className="flex items-center gap-3">
               {/* Visible username and role on the header right */}
-              <div className="flex items-center gap-2 border border-border/40 bg-muted/20 px-3 py-1 rounded-full">
+              <Link href="/" className="flex items-center gap-2 border border-border/40 bg-muted/20 px-3 py-1 rounded-full hover:bg-muted/40 transition-colors cursor-pointer">
                 <span className="font-medium text-foreground">@{user.username}</span>
                 <span className="text-muted-foreground/40">•</span>
                 {getRoleBadge(user.role)}
-              </div>
+              </Link>
 
               <Button
                 variant="ghost"

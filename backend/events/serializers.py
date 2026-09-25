@@ -1,6 +1,22 @@
 from rest_framework import serializers
-from .models import Event, Team, TeamMember, ProjectSubmission
+from .models import Event, Team, TeamMember, ProjectSubmission, Track, Prize, EventPhase
 
+
+
+class TrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Track
+        fields = ['id', 'title', 'description']
+
+class EventPhaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventPhase
+        fields = ['id', 'title', 'start_date', 'end_date']
+
+class PrizeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Prize
+        fields = ['id', 'title', 'amount', 'description']
 
 class ProjectSubmissionSerializer(serializers.ModelSerializer):
     team_name = serializers.CharField(source='team.name', read_only=True)
@@ -21,12 +37,16 @@ class ProjectSubmissionSerializer(serializers.ModelSerializer):
             'presentation_url',
             'presentation_file',
             'tech_stack',
+            'is_draft',
+            'track',
             'submitted_by',
             'submitted_by_username',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'team', 'submitted_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'team', 'is_draft',
+            'track',
+            'submitted_by', 'created_at', 'updated_at']
 
     def validate_github_url(self, value):
         val = value.strip()
@@ -102,6 +122,7 @@ class JoinTeamSerializer(serializers.Serializer):
 class EventListSerializer(serializers.ModelSerializer):
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     teams_count = serializers.IntegerField(read_only=True)
+    event_judges = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -120,8 +141,16 @@ class EventListSerializer(serializers.ModelSerializer):
             'created_by_username',
             'created_at',
             'teams_count',
+            'event_judges',
+            'require_github_url',
+            'require_demo_url',
+            'require_presentation',
+            'submission_guidelines',
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
+
+    def get_event_judges(self, obj):
+        return [{'id': j.id, 'username': j.username, 'email': j.email} for j in obj.judges.all()]
 
 
 class EventDetailSerializer(serializers.ModelSerializer):
@@ -129,6 +158,10 @@ class EventDetailSerializer(serializers.ModelSerializer):
     teams_count = serializers.IntegerField(read_only=True)
     my_team = serializers.SerializerMethodField()
     teams = serializers.SerializerMethodField()
+    phases = EventPhaseSerializer(many=True, read_only=True)
+    tracks = TrackSerializer(many=True, read_only=True)
+    prizes = PrizeSerializer(many=True, read_only=True)
+    event_judges = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -149,8 +182,19 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'teams_count',
             'my_team',
             'teams',
+            'phases',
+            'tracks',
+            'prizes',
+            'event_judges',
+            'require_github_url',
+            'require_demo_url',
+            'require_presentation',
+            'submission_guidelines',
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
+
+    def get_event_judges(self, obj):
+        return [{'id': j.id, 'username': j.username, 'email': j.email} for j in obj.judges.all()]
 
     def get_my_team(self, obj):
         request = self.context.get('request')
@@ -172,6 +216,10 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
 
 class EventCreateSerializer(serializers.ModelSerializer):
+    phases = EventPhaseSerializer(many=True, required=False)
+    tracks = TrackSerializer(many=True, required=False)
+    prizes = PrizeSerializer(many=True, required=False)
+
     class Meta:
         model = Event
         fields = [
@@ -185,6 +233,13 @@ class EventCreateSerializer(serializers.ModelSerializer):
             'location',
             'prize_pool',
             'max_team_size',
+            'phases',
+            'tracks',
+            'prizes',
+            'require_github_url',
+            'require_demo_url',
+            'require_presentation',
+            'submission_guidelines',
         ]
         read_only_fields = ['id']
 
@@ -194,3 +249,45 @@ class EventCreateSerializer(serializers.ModelSerializer):
         if start and end and end <= start:
             raise serializers.ValidationError({'end_date': "End date must be after the start date."})
         return attrs
+
+    def create(self, validated_data):
+        phases_data = validated_data.pop('phases', [])
+        tracks_data = validated_data.pop('tracks', [])
+        prizes_data = validated_data.pop('prizes', [])
+        
+        event = Event.objects.create(**validated_data)
+        
+        for phase_data in phases_data:
+            EventPhase.objects.create(event=event, **phase_data)
+        for track_data in tracks_data:
+            Track.objects.create(event=event, **track_data)
+        for prize_data in prizes_data:
+            Prize.objects.create(event=event, **prize_data)
+            
+        return event
+
+    def update(self, instance, validated_data):
+        phases_data = validated_data.pop('phases', None)
+        tracks_data = validated_data.pop('tracks', None)
+        prizes_data = validated_data.pop('prizes', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        if phases_data is not None:
+            instance.phases.all().delete()
+            for phase_data in phases_data:
+                EventPhase.objects.create(event=instance, **phase_data)
+                
+        if tracks_data is not None:
+            instance.tracks.all().delete()
+            for track_data in tracks_data:
+                Track.objects.create(event=instance, **track_data)
+                
+        if prizes_data is not None:
+            instance.prizes.all().delete()
+            for prize_data in prizes_data:
+                Prize.objects.create(event=instance, **prize_data)
+        
+        return instance

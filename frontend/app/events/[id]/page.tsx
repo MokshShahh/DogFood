@@ -6,6 +6,8 @@ import { useAuth } from "@/context/auth-context"
 import { Header } from "@/components/header"
 import { Squares } from "@/components/reactbits/squares"
 import { api, Event as EventType, Team, ProjectSubmission } from "@/lib/api"
+import { AdminEventDashboard } from "@/components/admin-event-dashboard"
+import { Edit2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -75,6 +77,23 @@ export default function EventDetailPage({
 
   // Submissions roster for Organizers/Judges
   const [allSubmissions, setAllSubmissions] = useState<ProjectSubmission[]>([])
+
+
+  const updateField = async (field: string, newValue: string) => {
+    try {
+      await api.updateEventAdmin(Number(eventId), { [field]: newValue })
+      fetchEvent()
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleEditField = async (field: string, currentValue: string) => {
+    const newValue = prompt(`Enter new ${field}:`, currentValue)
+    if (newValue && newValue !== currentValue) {
+      updateField(field, newValue)
+    }
+  }
 
   const fetchEvent = async () => {
     try {
@@ -240,6 +259,9 @@ export default function EventDetailPage({
               <ArrowLeft className="size-3.5 group-hover:-translate-x-0.5 transition-transform" />
               Back to Hackathons
             </Link>
+            <Link href={`/events/${eventId}/gallery`} className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors ml-4">
+              View Public Gallery <ArrowRight className="size-3.5" />
+            </Link>
           </div>
 
           {/* Event Header & Banner */}
@@ -258,15 +280,36 @@ export default function EventDetailPage({
             <div className="p-6 sm:p-8 space-y-6">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono uppercase tracking-wider">
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono uppercase tracking-wider">
                     {event.mode.replace("_", " ")}
+                    {user?.role === "admin" && (
+                      <button onClick={() => {
+                        const newMode = prompt("Enter new mode (virtual, in_person, hybrid):", event.mode);
+                        if (newMode && ["virtual", "in_person", "hybrid"].includes(newMode) && newMode !== event.mode) {
+                          updateField("mode", newMode);
+                        } else if (newMode && !["virtual", "in_person", "hybrid"].includes(newMode)) {
+                          alert("Invalid mode. Must be virtual, in_person, or hybrid.");
+                        }
+                      }} className="ml-1 text-emerald-400/70 hover:text-emerald-400"><Edit2 className="size-3" /></button>
+                    )}
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono bg-muted/30 px-2 py-0.5 rounded">
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted/30 px-2 py-0.5 rounded">
                     Max Team Size: {event.max_team_size}
+                    {user?.role === "admin" && (
+                      <button onClick={() => {
+                        const newSize = prompt("Enter new max team size:", event.max_team_size.toString());
+                        if (newSize && !isNaN(Number(newSize)) && newSize !== event.max_team_size.toString()) {
+                          updateField("max_team_size", newSize);
+                        }
+                      }} className="ml-1 text-muted-foreground hover:text-foreground"><Edit2 className="size-3" /></button>
+                    )}
                   </span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-foreground">
+                <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-foreground flex items-center gap-2">
                   {event.title}
+                  {user?.role === "admin" && (
+                    <button onClick={() => handleEditField("title", event.title)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-5" /></button>
+                  )}
                 </h1>
                 <p className="text-sm text-muted-foreground font-mono">
                   Organized by <span className="text-foreground">@{event.created_by_username}</span>
@@ -279,8 +322,18 @@ export default function EventDetailPage({
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     <Calendar className="size-3" /> Timeline
                   </div>
-                  <div className="text-sm text-foreground font-medium">
-                    {new Date(event.start_date).toLocaleDateString()} – {new Date(event.end_date).toLocaleDateString()}
+                  <div className="text-sm text-foreground font-medium flex items-center justify-between">
+                    <span>
+                      {new Date(event.start_date).toLocaleDateString()} – {new Date(event.end_date).toLocaleDateString()}
+                    </span>
+                    {user?.role === "admin" && (
+                      <button onClick={() => {
+                        const newStart = prompt("Enter new start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM):", event.start_date)
+                        if (newStart && newStart !== event.start_date) updateField("start_date", newStart)
+                        const newEnd = prompt("Enter new end date (YYYY-MM-DD or YYYY-MM-DDTHH:MM):", event.end_date)
+                        if (newEnd && newEnd !== event.end_date) updateField("end_date", newEnd)
+                      }} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                    )}
                   </div>
                 </div>
 
@@ -288,8 +341,11 @@ export default function EventDetailPage({
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     <Globe className="size-3" /> Location
                   </div>
-                  <div className="text-sm text-foreground font-medium truncate">
-                    {event.location}
+                  <div className="text-sm text-foreground font-medium truncate flex items-center justify-between">
+                    <span>{event.location}</span>
+                    {user?.role === "admin" && (
+                      <button onClick={() => handleEditField("location", event.location)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                    )}
                   </div>
                 </div>
 
@@ -297,21 +353,49 @@ export default function EventDetailPage({
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                     <Award className="size-3" /> Prize Pool
                   </div>
-                  <div className="text-sm text-emerald-400 font-semibold truncate">
-                    {event.prize_pool || "Non-monetary / Certificates"}
+                  <div className="text-sm text-emerald-400 font-semibold truncate flex items-center justify-between">
+                    <span>{event.prize_pool || "Non-monetary / Certificates"}</span>
+                    {user?.role === "admin" && (
+                      <button onClick={() => handleEditField("prize_pool", event.prize_pool)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Description */}
               <div className="space-y-2 border-t border-border/30 pt-6">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
                   Event Brief & Objectives
+                  {user?.role === "admin" && (
+                    <button onClick={() => handleEditField("description", event.description)} className="text-muted-foreground hover:text-primary"><Edit2 className="size-3.5" /></button>
+                  )}
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans">
                   {event.description}
                 </p>
               </div>
+
+              {/* Event Phases */}
+              {event.phases && event.phases.length > 0 && (
+                <div className="space-y-3 border-t border-border/30 pt-6">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <Layers className="size-4" /> Hackathon Phases
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {event.phases.map((phase) => (
+                      <div key={phase.id} className="p-3.5 rounded-lg border border-border/30 bg-muted/10 space-y-1">
+                        <div className="text-sm font-semibold text-foreground truncate">
+                          {phase.title}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-mono flex items-center gap-1.5">
+                          <Calendar className="size-3" />
+                          {new Date(phase.start_date).toLocaleDateString()} – {new Date(phase.end_date).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -329,7 +413,11 @@ export default function EventDetailPage({
             </div>
           )}
 
-          {/* 1. PARTICIPATION & TEAM PORTAL */}
+          {user?.role === "admin" ? (
+            <AdminEventDashboard eventId={Number(eventId)} eventObj={event} refreshEvent={fetchEvent} />
+          ) : (
+            <>
+              {/* 1. PARTICIPATION & TEAM PORTAL */}
           <div className="rounded-xl border border-border/40 bg-background/80 p-6 sm:p-8 backdrop-blur-md shadow-2xl space-y-6">
             <div className="flex items-center justify-between border-b border-border/30 pb-4">
               <div>
@@ -636,7 +724,9 @@ export default function EventDetailPage({
               </div>
             </div>
           )}
-        </div>
+        
+            </>
+          )}</div>
       </div>
     </div>
   )

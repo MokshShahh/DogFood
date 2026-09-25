@@ -35,6 +35,18 @@ class Event(models.Model):
         on_delete=models.CASCADE,
         related_name='created_events',
     )
+    judges = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='judged_events',
+        blank=True
+    )
+    
+    # Submission Requirements
+    require_github_url = models.BooleanField(default=True)
+    require_demo_url = models.BooleanField(default=False)
+    require_presentation = models.BooleanField(default=False)
+    submission_guidelines = models.TextField(blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -47,6 +59,38 @@ class Event(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class EventPhase(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='phases')
+    title = models.CharField(max_length=200, help_text="e.g. Sign up, Code sprint, Submission, Problem Statement Release")
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    
+    class Meta:
+        ordering = ['start_date']
+
+    def __str__(self):
+        return f"{self.title} ({self.event.title})"
+
+
+class Track(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='tracks')
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return self.title
+
+
+class Prize(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='prizes')
+    title = models.CharField(max_length=200)
+    amount = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return f"{self.title} - {self.amount}"
 
 
 class Team(models.Model):
@@ -116,11 +160,11 @@ class ProjectSubmission(models.Model):
         on_delete=models.CASCADE,
         related_name='submission',
     )
-    title = models.CharField(max_length=200)
-    tagline = models.CharField(max_length=255, help_text="Short elevator pitch or 1-line overview")
-    problem_statement = models.TextField(help_text="What problem does this project solve?")
-    solution_description = models.TextField(help_text="Technical explanation of the solution architecture")
-    github_url = models.URLField(max_length=500, help_text="GitHub repository link")
+    title = models.CharField(max_length=200, blank=True, default='')
+    tagline = models.CharField(max_length=255, blank=True, default='', help_text="Short elevator pitch or 1-line overview")
+    problem_statement = models.TextField(blank=True, default='', help_text="What problem does this project solve?")
+    solution_description = models.TextField(blank=True, default='', help_text="Technical explanation of the solution architecture")
+    github_url = models.URLField(max_length=500, blank=True, default='', help_text="GitHub repository link")
     demo_url = models.URLField(max_length=500, blank=True, default='', help_text="Live web app or demo video link")
     presentation_url = models.URLField(max_length=500, blank=True, default='', help_text="Slides, Canva, or presentation link")
     presentation_file = models.FileField(
@@ -140,6 +184,8 @@ class ProjectSubmission(models.Model):
         on_delete=models.CASCADE,
         related_name='submitted_projects',
     )
+    is_draft = models.BooleanField(default=True, help_text="Draft submissions are not visible in the public gallery")
+    track = models.ForeignKey(Track, on_delete=models.SET_NULL, null=True, blank=True, related_name='submissions')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

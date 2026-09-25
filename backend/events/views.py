@@ -39,8 +39,17 @@ class EventListCreateView(APIView):
                 {'detail': 'Only organizers and administrators are authorized to create hackathon events.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+            
+        data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+        import json
+        for field in ['phases', 'tracks', 'prizes']:
+            if field in data and isinstance(data[field], str):
+                try:
+                    data[field] = json.loads(data[field])
+                except:
+                    pass
 
-        serializer = EventCreateSerializer(data=request.data)
+        serializer = EventCreateSerializer(data=data)
         if serializer.is_valid():
             event = serializer.save(created_by=user)
             return Response(
@@ -225,10 +234,35 @@ class SubmitProjectView(APIView):
 
         submission = getattr(team, 'submission', None)
 
+        # Check requirements if NOT a draft
+        is_draft = request.data.get('is_draft') == 'true' or request.data.get('is_draft') is True
+
+        if not is_draft:
+            if not request.data.get('title'):
+                return Response({'title': 'Project Title is required for final submission.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not request.data.get('tagline'):
+                return Response({'tagline': 'Project Tagline is required for final submission.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not request.data.get('problem_statement'):
+                return Response({'problem_statement': 'Problem Statement is required for final submission.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not request.data.get('solution_description'):
+                return Response({'solution_description': 'Solution Description is required for final submission.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            if event.require_github_url and not request.data.get('github_url'):
+                return Response({'github_url': 'GitHub URL is required for this hackathon.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            if event.require_demo_url and not request.data.get('demo_url'):
+                return Response({'demo_url': 'A Demo Video or Deployed URL is required for this hackathon.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            if event.require_presentation and not request.data.get('presentation_url') and not request.FILES.get('presentation_file'):
+                # Check if existing submission already has a file
+                has_existing_file = submission and submission.presentation_file
+                if not has_existing_file:
+                    return Response({'presentation': 'A presentation (URL or file) is required for this hackathon.'}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = ProjectSubmissionSerializer(
             instance=submission,
             data=request.data,
-            partial=bool(submission),
+            partial=bool(submission) or is_draft,
         )
 
         if not serializer.is_valid():
@@ -281,4 +315,166 @@ class EventSubmissionsListView(APIView):
         submissions = ProjectSubmission.objects.filter(team__event=event)
         serializer = ProjectSubmissionSerializer(submissions, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+
+class PublicGalleryView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        event = get_object_or_404(Event, pk=pk)
+        
+        # Search query
+        query = request.query_params.get('q', '')
+        track_id = request.query_params.get('track', '')
+
+        submissions = ProjectSubmission.objects.filter(team__event=event, is_draft=False)
+        
+        if query:
+            submissions = submissions.filter(title__icontains=query) | submissions.filter(tech_stack__icontains=query)
+            
+        if track_id and track_id.isdigit():
+            submissions = submissions.filter(track_id=track_id)
+
+        serializer = ProjectSubmissionSerializer(submissions.distinct(), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+class AdminEventManageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        event = get_object_or_404(Event, pk=pk)
+        event.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        event = get_object_or_404(Event, pk=pk)
+        serializer = EventCreateSerializer(event, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(EventDetailSerializer(event).data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class AdminAllTeamsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        teams = Team.objects.all().order_by('-created_at')
+        event_id = request.query_params.get('event')
+        if event_id:
+            teams = teams.filter(event_id=event_id)
+        serializer = TeamSerializer(teams, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AdminTeamManageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        team = get_object_or_404(Team, pk=pk)
+        serializer = TeamSerializer(team)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        team = get_object_or_404(Team, pk=pk)
+        team.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        team = get_object_or_404(Team, pk=pk)
+        serializer = TeamSerializer(team, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdminTeamMemberManageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, team_pk, user_pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        membership = get_object_or_404(TeamMember, team_id=team_pk, user_id=user_pk)
+        team = membership.team
+        membership.delete()
+        if team.leader_id == user_pk:
+            first_member = team.memberships.first()
+            if first_member:
+                team.leader = first_member.user
+                team.save(update_fields=['leader'])
+            else:
+                team.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class AdminAllSubmissionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        submissions = ProjectSubmission.objects.all().order_by('-created_at')
+        event_id = request.query_params.get('event')
+        if event_id:
+            submissions = submissions.filter(team__event_id=event_id)
+        serializer = ProjectSubmissionSerializer(submissions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AdminSubmissionManageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        submission = get_object_or_404(ProjectSubmission, pk=pk)
+        submission.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        submission = get_object_or_404(ProjectSubmission, pk=pk)
+        serializer = ProjectSubmissionSerializer(submission, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+class AdminEventJudgeManageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        event = get_object_or_404(Event, pk=pk)
+        user_id = request.data.get('user_id')
+        user = get_object_or_404(User, pk=user_id)
+        event.judges.add(user)
+        return Response({'message': 'Judge added'}, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        event = get_object_or_404(Event, pk=pk)
+        user_id = request.data.get('user_id')
+        user = get_object_or_404(User, pk=user_id)
+        event.judges.remove(user)
+        return Response({'message': 'Judge removed'}, status=status.HTTP_200_OK)
 

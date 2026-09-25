@@ -47,6 +47,20 @@ export interface Team {
   submission?: ProjectSubmission | null
 }
 
+
+export interface Track {
+  id: number
+  title: string
+  description: string
+}
+
+export interface Prize {
+  id: number
+  title: string
+  amount: string
+  description: string
+}
+
 export interface ProjectSubmission {
   id: number
   team: number
@@ -64,6 +78,8 @@ export interface ProjectSubmission {
   submitted_by_username: string
   created_at: string
   updated_at: string
+  is_draft: boolean
+  track: number | null
 }
 
 export interface Event {
@@ -83,6 +99,13 @@ export interface Event {
   teams_count: number
   my_team?: Team | null
   teams?: Team[]
+  tracks?: Track[]
+  prizes?: Prize[]
+  phases?: { id: number; title: string; start_date: string; end_date: string }[]
+  require_github_url?: boolean
+  require_demo_url?: boolean
+  require_presentation?: boolean
+  submission_guidelines?: string
 }
 
 export async function apiRequest<T = any>(
@@ -216,6 +239,65 @@ export const api = {
         body: formData,
       }
     ),
+
+  
+  listGallery: (eventId: number | string, params?: { q?: string; track?: string }) => {
+    let url = `/api/events/${eventId}/gallery/`
+    if (params) {
+      const qs = new URLSearchParams()
+      if (params.q) qs.append("q", params.q)
+      if (params.track) qs.append("track", params.track)
+      url += `?${qs.toString()}`
+    }
+    return apiRequest<ProjectSubmission[]>(url)
+  },
+
+  
+  // Admin Endpoints
+  deleteEvent: (eventId: number) =>
+    apiRequest<{ message: string }>(`/api/events/admin/events/${eventId}/`, {
+      method: "DELETE",
+    }),
+  updateEventAdmin: (eventId: number, data: Partial<Event>) =>
+    apiRequest<Event>(`/api/events/admin/events/${eventId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  addEventJudge: (eventId: number, userId: number) =>
+    apiRequest<{ message: string }>(`/api/events/admin/events/${eventId}/judges/`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  removeEventJudge: (eventId: number, userId: number) =>
+    apiRequest<{ message: string }>(`/api/events/admin/events/${eventId}/judges/`, {
+      method: "DELETE",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  listAllTeams: (eventId?: number) => apiRequest<Team[]>(eventId ? `/api/events/admin/teams/?event=${eventId}` : "/api/events/admin/teams/"),
+  getTeamAdmin: (teamId: number) => apiRequest<Team>(`/api/events/admin/teams/${teamId}/`),
+    removeTeamMember: (teamId: number, userId: number) =>
+    apiRequest<{ message: string }>(`/api/events/admin/teams/${teamId}/members/${userId}/`, {
+      method: "DELETE",
+    }),
+  deleteTeam: (teamId: number) =>
+    apiRequest<{ message: string }>(`/api/events/admin/teams/${teamId}/`, {
+      method: "DELETE",
+    }),
+  updateTeamAdmin: (teamId: number, data: Partial<Team>) =>
+    apiRequest<Team>(`/api/events/admin/teams/${teamId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  listAllSubmissions: (eventId?: number) => apiRequest<ProjectSubmission[]>(eventId ? `/api/events/admin/submissions/?event=${eventId}` : "/api/events/admin/submissions/"),
+  deleteSubmission: (subId: number) =>
+    apiRequest<{ message: string }>(`/api/events/admin/submissions/${subId}/`, {
+      method: "DELETE",
+    }),
+  updateSubmissionAdmin: (subId: number, data: Partial<ProjectSubmission>) =>
+    apiRequest<ProjectSubmission>(`/api/events/admin/submissions/${subId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
 
   listEventSubmissions: (eventId: number | string) =>
     apiRequest<ProjectSubmission[]>(`/api/events/${eventId}/submissions/`),

@@ -1,5 +1,12 @@
 from django.urls import path
 from .views import (
+    AdminEventManageView,
+    AdminAllTeamsView,
+    AdminTeamManageView,
+    AdminTeamMemberManageView,
+    AdminAllSubmissionsView,
+    AdminSubmissionManageView,
+    AdminEventJudgeManageView,
     EventListCreateView,
     EventDetailView,
     CreateTeamView,
@@ -8,6 +15,7 @@ from .views import (
     SubmitProjectView,
     MySubmissionView,
     EventSubmissionsListView,
+    PublicGalleryView,
 )
 
 urlpatterns = [
@@ -19,4 +27,14 @@ urlpatterns = [
     path('<int:pk>/submit/', SubmitProjectView.as_view(), name='project_submit'),
     path('<int:pk>/my-submission/', MySubmissionView.as_view(), name='my_submission'),
     path('<int:pk>/submissions/', EventSubmissionsListView.as_view(), name='event_submissions'),
+    path('<int:pk>/gallery/', PublicGalleryView.as_view(), name='event_gallery'),
+
+    path('admin/events/<int:pk>/', AdminEventManageView.as_view(), name='admin_event_manage'),
+    path('admin/events/<int:pk>/judges/', AdminEventJudgeManageView.as_view(), name='admin_event_judge_manage'),
+    path('admin/teams/', AdminAllTeamsView.as_view(), name='admin_all_teams'),
+    path('admin/teams/<int:pk>/', AdminTeamManageView.as_view(), name='admin_team_manage'),
+    path('admin/teams/<int:team_pk>/members/<int:user_pk>/', AdminTeamMemberManageView.as_view(), name='admin_team_member_manage'),
+    path('admin/submissions/', AdminAllSubmissionsView.as_view(), name='admin_all_submissions'),
+    path('admin/submissions/<int:pk>/', AdminSubmissionManageView.as_view(), name='admin_submission_manage'),
 ]
+
