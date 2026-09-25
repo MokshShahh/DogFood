@@ -128,3 +128,6 @@ cd frontend
 npm run typecheck
 npm run build
 ```
+
+# IMPORTANT
+if DB_HOST isnt set in env then default db is sqlite not psql
