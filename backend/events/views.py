@@ -29,6 +29,11 @@ class EventListCreateView(APIView):
 
     def get(self, request):
         events = Event.objects.all().order_by('-created_at')
+        filter_param = request.query_params.get('filter')
+        if filter_param == 'organized' and request.user.is_authenticated:
+            events = events.filter(created_by=request.user)
+        elif filter_param == 'judged' and request.user.is_authenticated:
+            events = events.filter(judges=request.user)
         serializer = EventListSerializer(events, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -268,7 +273,7 @@ class SubmitProjectView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        saved_submission = serializer.save(team=team, submitted_by=user)
+        saved_submission = serializer.save(team=team, submitted_by=user, is_draft=is_draft)
         message = 'Project submission updated successfully!' if submission else 'Project submitted successfully!'
 
         return Response(
@@ -329,10 +334,35 @@ class PublicGalleryView(APIView):
         query = request.query_params.get('q', '')
         track_id = request.query_params.get('track', '')
 
-        submissions = ProjectSubmission.objects.filter(team__event=event, is_draft=False)
+        from django.utils import timezone
+        now = timezone.now()
+        is_ended = event.end_date <= now
+
+        user = request.user
+        is_reviewer = (
+            user.is_authenticated and (
+                user.role == 'admin' or
+                user.is_superuser or
+                event.created_by == user or
+                user.role == 'judge' or
+                event.judges.filter(pk=user.pk).exists()
+            )
+        )
+
+        # When the contest has concluded, or if the requester is an authorized reviewer (judge/organizer/admin),
+        # all project submissions (including drafts) are visible for evaluation and public archive.
+        if is_ended or is_reviewer:
+            submissions = ProjectSubmission.objects.filter(team__event=event)
+        else:
+            submissions = ProjectSubmission.objects.filter(team__event=event, is_draft=False)
         
         if query:
-            submissions = submissions.filter(title__icontains=query) | submissions.filter(tech_stack__icontains=query)
+            from django.db.models import Q
+            submissions = submissions.filter(
+                Q(title__icontains=query) |
+                Q(tech_stack__icontains=query) |
+                Q(team__name__icontains=query)
+            )
             
         if track_id and track_id.isdigit():
             submissions = submissions.filter(track_id=track_id)
@@ -346,17 +376,25 @@ class AdminEventManageView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, pk):
-        if request.user.role != 'admin' and not request.user.is_superuser:
-            return Response(status=status.HTTP_403_FORBIDDEN)
         event = get_object_or_404(Event, pk=pk)
+        if request.user.role != 'admin' and not request.user.is_superuser and event.created_by != request.user:
+            return Response(status=status.HTTP_403_FORBIDDEN)
         event.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def patch(self, request, pk):
-        if request.user.role != 'admin' and not request.user.is_superuser:
-            return Response(status=status.HTTP_403_FORBIDDEN)
         event = get_object_or_404(Event, pk=pk)
-        serializer = EventCreateSerializer(event, data=request.data, partial=True)
+        if request.user.role != 'admin' and not request.user.is_superuser and event.created_by != request.user:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+        import json
+        for field in ['phases', 'tracks', 'prizes']:
+            if field in data and isinstance(data[field], str):
+                try:
+                    data[field] = json.loads(data[field])
+                except:
+                    pass
+        serializer = EventCreateSerializer(event, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(EventDetailSerializer(event).data, status=status.HTTP_200_OK)
@@ -461,20 +499,59 @@ class AdminEventJudgeManageView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if request.user.role != 'admin' and not request.user.is_superuser:
-            return Response(status=status.HTTP_403_FORBIDDEN)
         event = get_object_or_404(Event, pk=pk)
+        if request.user.role != 'admin' and not request.user.is_superuser and event.created_by != request.user:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
         user_id = request.data.get('user_id')
-        user = get_object_or_404(User, pk=user_id)
+        username = request.data.get('username')
+        email = request.data.get('email')
+
+        user = None
+        if user_id:
+            user = get_object_or_404(User, pk=user_id)
+        elif username:
+            user = get_object_or_404(User, username=username)
+        elif email:
+            user = get_object_or_404(User, email=email)
+        else:
+            return Response({'error': 'user_id, username, or email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
         event.judges.add(user)
-        return Response({'message': 'Judge added'}, status=status.HTTP_200_OK)
+        # If user's role was participant, elevate to judge
+        if user.role == 'participant':
+            user.role = 'judge'
+            user.save(update_fields=['role'])
+
+        return Response({
+            'message': f'@{user.username} added as Judge to this event.',
+            'judge': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'role': user.role,
+            }
+        }, status=status.HTTP_200_OK)
 
     def delete(self, request, pk):
-        if request.user.role != 'admin' and not request.user.is_superuser:
-            return Response(status=status.HTTP_403_FORBIDDEN)
         event = get_object_or_404(Event, pk=pk)
+        if request.user.role != 'admin' and not request.user.is_superuser and event.created_by != request.user:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
         user_id = request.data.get('user_id')
-        user = get_object_or_404(User, pk=user_id)
+        username = request.data.get('username')
+        email = request.data.get('email')
+
+        user = None
+        if user_id:
+            user = get_object_or_404(User, pk=user_id)
+        elif username:
+            user = get_object_or_404(User, username=username)
+        elif email:
+            user = get_object_or_404(User, email=email)
+        else:
+            return Response({'error': 'user_id, username, or email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
         event.judges.remove(user)
-        return Response({'message': 'Judge removed'}, status=status.HTTP_200_OK)
+        return Response({'message': f'@{user.username} removed from judges.'}, status=status.HTTP_200_OK)
 

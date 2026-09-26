@@ -226,3 +226,32 @@ class AppointJudgeView(APIView):
             'message': f'User {target_user.username} has been appointed as a Judge.',
             'user': UserSerializer(target_user).data,
         }, status=status.HTTP_200_OK)
+
+
+class AppointableJudgesView(APIView):
+    """
+    Allows organizers and administrators to search/list platform users
+    to appoint them as judges for an event.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ['organizer', 'admin'] and not request.user.is_superuser:
+            return Response(
+                {'detail': 'Only organizers and administrators can search users to appoint judges.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        query = request.query_params.get('q', '').strip()
+        users = User.objects.all()
+        if query:
+            from django.db.models import Q
+            users = users.filter(
+                Q(username__icontains=query) |
+                Q(email__icontains=query) |
+                Q(first_name__icontains=query) |
+                Q(last_name__icontains=query)
+            )
+        users = users.order_by('username')[:40]
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

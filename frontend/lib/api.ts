@@ -183,8 +183,15 @@ export const api = {
       method: "POST",
     }),
 
-  // Admin Management
+  // Admin & Organizer Management
   listUsers: () => apiRequest<User[]>("/api/auth/users/"),
+
+  listAppointableJudges: (query?: string) =>
+    apiRequest<User[]>(
+      query
+        ? `/api/auth/appointable-judges/?q=${encodeURIComponent(query)}`
+        : "/api/auth/appointable-judges/"
+    ),
 
   appointJudge: (userId: number) =>
     apiRequest<{ message: string; user: User }>(
@@ -195,7 +202,17 @@ export const api = {
     ),
 
   // Events & Teams
-  listEvents: () => apiRequest<Event[]>("/api/events/"),
+  listEvents: (params?: { filter?: string }) => {
+    let url = "/api/events/"
+    if (params?.filter) {
+      url += `?filter=${encodeURIComponent(params.filter)}`
+    }
+    return apiRequest<Event[]>(url)
+  },
+
+  listMyOrganizedEvents: () => apiRequest<Event[]>("/api/events/?filter=organized"),
+
+  listMyJudgedEvents: () => apiRequest<Event[]>("/api/events/?filter=judged"),
 
   getEvent: (id: number | string) => apiRequest<Event>(`/api/events/${id}/`),
 
@@ -203,6 +220,12 @@ export const api = {
     apiRequest<Event>("/api/events/", {
       method: "POST",
       body: formData,
+    }),
+
+  updateEvent: (eventId: number, data: Partial<any>) =>
+    apiRequest<Event>(`/api/events/admin/events/${eventId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
     }),
 
   createTeam: (eventId: number | string, name: string) =>
@@ -241,7 +264,6 @@ export const api = {
       }
     ),
 
-  
   listGallery: (eventId: number | string, params?: { q?: string; track?: string }) => {
     let url = `/api/events/${eventId}/gallery/`
     if (params) {
@@ -253,8 +275,7 @@ export const api = {
     return apiRequest<ProjectSubmission[]>(url)
   },
 
-  
-  // Admin Endpoints
+  // Admin / Organizer Management Endpoints
   deleteEvent: (eventId: number) =>
     apiRequest<{ message: string }>(`/api/events/admin/events/${eventId}/`, {
       method: "DELETE",
@@ -264,19 +285,38 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
-  addEventJudge: (eventId: number, userId: number) =>
-    apiRequest<{ message: string }>(`/api/events/admin/events/${eventId}/judges/`, {
-      method: "POST",
-      body: JSON.stringify({ user_id: userId }),
-    }),
-  removeEventJudge: (eventId: number, userId: number) =>
-    apiRequest<{ message: string }>(`/api/events/admin/events/${eventId}/judges/`, {
-      method: "DELETE",
-      body: JSON.stringify({ user_id: userId }),
-    }),
-  listAllTeams: (eventId?: number) => apiRequest<Team[]>(eventId ? `/api/events/admin/teams/?event=${eventId}` : "/api/events/admin/teams/"),
+  addEventJudge: (
+    eventId: number,
+    payload: number | { user_id?: number; username?: string; email?: string }
+  ) =>
+    apiRequest<{ message: string; judge?: any }>(
+      `/api/events/admin/events/${eventId}/judges/`,
+      {
+        method: "POST",
+        body: JSON.stringify(
+          typeof payload === "number" ? { user_id: payload } : payload
+        ),
+      }
+    ),
+  removeEventJudge: (
+    eventId: number,
+    payload: number | { user_id?: number; username?: string; email?: string }
+  ) =>
+    apiRequest<{ message: string }>(
+      `/api/events/admin/events/${eventId}/judges/`,
+      {
+        method: "DELETE",
+        body: JSON.stringify(
+          typeof payload === "number" ? { user_id: payload } : payload
+        ),
+      }
+    ),
+  listAllTeams: (eventId?: number) =>
+    apiRequest<Team[]>(
+      eventId ? `/api/events/admin/teams/?event=${eventId}` : "/api/events/admin/teams/"
+    ),
   getTeamAdmin: (teamId: number) => apiRequest<Team>(`/api/events/admin/teams/${teamId}/`),
-    removeTeamMember: (teamId: number, userId: number) =>
+  removeTeamMember: (teamId: number, userId: number) =>
     apiRequest<{ message: string }>(`/api/events/admin/teams/${teamId}/members/${userId}/`, {
       method: "DELETE",
     }),

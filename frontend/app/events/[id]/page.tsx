@@ -7,6 +7,8 @@ import { Header } from "@/components/header"
 import { Squares } from "@/components/reactbits/squares"
 import { api, Event as EventType, Team, ProjectSubmission } from "@/lib/api"
 import { AdminEventDashboard } from "@/components/admin-event-dashboard"
+import { JudgeAppointmentCombobox } from "@/components/judge-appointment-combobox"
+import { EditEventModal } from "@/components/edit-event-modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -83,6 +85,7 @@ export default function EventDetailPage({
 
   // Submissions roster for Organizers/Judges
   const [allSubmissions, setAllSubmissions] = useState<ProjectSubmission[]>([])
+  const [isEditingModalOpen, setIsEditingModalOpen] = useState(false)
 
 
   const updateField = async (field: string, newValue: string) => {
@@ -130,6 +133,8 @@ export default function EventDetailPage({
   useEffect(() => {
     fetchEvent()
   }, [eventId, user])
+
+  const isCreatorOrAdmin = Boolean(user && (user.role === "admin" || user.id === event?.created_by))
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -380,18 +385,21 @@ export default function EventDetailPage({
                   </Badge>
                 </div>
 
-                <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-foreground flex items-center gap-2">
-                  {event.title}
-                  {user?.role === "admin" && (
-                    <button
-                      onClick={() => handleEditField("title", event.title)}
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      title="Edit Title"
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h1 className="text-2xl sm:text-3xl font-light tracking-tight text-foreground flex items-center gap-2">
+                    {event.title}
+                  </h1>
+                  {user && (user.role === "admin" || user.id === event.created_by) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingModalOpen(true)}
+                      className="h-7 text-xs font-mono hover:border-primary hover:text-primary"
                     >
-                      <Edit2 className="size-4" />
-                    </button>
+                      <Edit2 className="size-3 mr-1" /> Edit Contest
+                    </Button>
                   )}
-                </h1>
+                </div>
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono">
                   <span>
@@ -881,39 +889,54 @@ export default function EventDetailPage({
               </div>
 
               {/* Judges / Evaluation Panel */}
-              {event.event_judges && event.event_judges.length > 0 && (
-                <div className="space-y-3 border-t border-border/30 pt-6">
+              {(isCreatorOrAdmin || (event.event_judges && event.event_judges.length > 0)) && (
+                <div className="space-y-4 border-t border-border/30 pt-6">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
                       <Shield className="size-4 text-primary" />
-                      Judging & Evaluation Panel ({event.event_judges.length})
+                      Judging & Evaluation Panel ({event.event_judges?.length || 0})
                     </h3>
                     <span className="text-[11px] text-muted-foreground font-mono">
-                      Project Reviewers
+                      {isCreatorOrAdmin ? "Organizer Controls" : "Project Reviewers"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {event.event_judges.map((judge) => (
-                      <div
-                        key={judge.id}
-                        className="p-3 rounded-lg border border-border/30 bg-muted/10 flex items-center gap-3"
-                      >
-                        <Avatar className="size-8 border border-border/40">
-                          <AvatarFallback className="text-[11px] font-mono font-semibold uppercase bg-muted/50">
-                            {judge.username.slice(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-semibold text-foreground truncate">
-                            @{judge.username}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
-                            <Shield className="size-2.5 text-primary" /> Judge
+
+                  {isCreatorOrAdmin ? (
+                    <div className="p-4 rounded-lg border border-border/40 bg-muted/10 space-y-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        Search and appoint judges for this contest from registered platform users:
+                      </p>
+                      <JudgeAppointmentCombobox
+                        eventId={event.id}
+                        currentJudges={event.event_judges || []}
+                        onJudgeAdded={() => fetchEvent()}
+                        onJudgeRemoved={() => fetchEvent()}
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {event.event_judges?.map((judge) => (
+                        <div
+                          key={judge.id}
+                          className="p-3 rounded-lg border border-border/30 bg-muted/10 flex items-center gap-3"
+                        >
+                          <Avatar className="size-8 border border-border/40">
+                            <AvatarFallback className="text-[11px] font-mono font-semibold uppercase bg-muted/50">
+                              {judge.username.slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold text-foreground truncate">
+                              @{judge.username}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                              <Shield className="size-2.5 text-primary" /> Judge
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1244,6 +1267,19 @@ export default function EventDetailPage({
           {/* 3. ADMIN MANAGEMENT */}
           {user?.role === "admin" && (
             <AdminEventDashboard eventId={Number(eventId)} eventObj={event} refreshEvent={fetchEvent} />
+          )}
+
+          {/* Edit Event Modal for Organizers & Admins */}
+          {event && isEditingModalOpen && (
+            <EditEventModal
+              event={event}
+              isOpen={isEditingModalOpen}
+              onClose={() => setIsEditingModalOpen(false)}
+              onUpdated={(updated) => {
+                setActionSuccess(`Event "${updated.title}" updated successfully.`)
+                fetchEvent()
+              }}
+            />
           )}
         </div>
       </div>

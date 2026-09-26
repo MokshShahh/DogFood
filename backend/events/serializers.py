@@ -44,7 +44,7 @@ class ProjectSubmissionSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'team', 'is_draft',
+        read_only_fields = ['id', 'team',
             'track',
             'submitted_by', 'created_at', 'updated_at']
 
