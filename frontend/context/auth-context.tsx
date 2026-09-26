@@ -45,7 +45,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (credentials: { username: string; password: string }) => {
     const res = await api.login(credentials)
     setUser(res.user)
-    router.push("/")
+    if (res.user.role === "organizer" || res.user.role === "judge" || res.user.role === "admin") {
+      router.push("/dashboard")
+    } else {
+      router.push("/")
+    }
   }
 
   const register = async (payload: {
@@ -57,7 +61,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     const res = await api.register(payload)
     setUser(res.user)
-    router.push("/")
+    if (res.user.role === "organizer" || res.user.role === "admin") {
+      router.push("/dashboard")
+    } else {
+      router.push("/")
+    }
   }
 
   const logout = async () => {

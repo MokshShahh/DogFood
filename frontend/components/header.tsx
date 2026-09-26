@@ -56,6 +56,15 @@ export function Header() {
         <div className="flex items-center gap-4 font-mono text-xs">
           {user ? (
             <div className="flex items-center gap-3">
+              {(user.role === "organizer" || user.role === "judge" || user.role === "admin") && (
+                <Link
+                  href="/dashboard"
+                  className="font-mono text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1 rounded-md border border-border/30 bg-muted/10 hover:bg-muted/30"
+                >
+                  Dashboard
+                </Link>
+              )}
+
               {/* Visible username and role on the header right */}
               <Link href="/" className="flex items-center gap-2 border border-border/40 bg-muted/20 px-3 py-1 rounded-full hover:bg-muted/40 transition-colors cursor-pointer">
                 <span className="font-medium text-foreground">@{user.username}</span>

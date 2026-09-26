@@ -7,6 +7,7 @@ from .views import (
     CurrentUserView,
     AdminUserListView,
     AppointJudgeView,
+    AppointableJudgesView,
 )
 
 urlpatterns = [
@@ -17,4 +18,5 @@ urlpatterns = [
     path('me/', CurrentUserView.as_view(), name='auth_me'),
     path('users/', AdminUserListView.as_view(), name='admin_user_list'),
     path('users/<int:pk>/appoint-judge/', AppointJudgeView.as_view(), name='appoint_judge'),
+    path('appointable-judges/', AppointableJudgesView.as_view(), name='appointable_judges'),
 ]
