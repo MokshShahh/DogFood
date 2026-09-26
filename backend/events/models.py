@@ -195,3 +195,123 @@ class ProjectSubmission(models.Model):
     def __str__(self):
         return f"{self.title} - Team {self.team.name} ({self.team.event.title})"
 
+
+class EventRubric(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='rubrics')
+    title = models.CharField(max_length=200, help_text="e.g. Innovation, Technical Execution, UI/UX, Presentation")
+    description = models.TextField(blank=True, default='', help_text="Evaluation guidelines for judges")
+    weight = models.FloatField(default=20.0, help_text="Weight percentage (e.g. 25 for 25%)")
+    max_score = models.PositiveIntegerField(default=10, help_text="Maximum mark (default 10)")
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.title} ({self.weight}% - {self.event.title})"
+
+
+class ProjectEvaluation(models.Model):
+    submission = models.ForeignKey(
+        ProjectSubmission,
+        on_delete=models.CASCADE,
+        related_name='evaluations',
+    )
+    judge = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='evaluations',
+    )
+    feedback = models.TextField(blank=True, default='', help_text="Optional remarks or feedback notes")
+    total_score = models.FloatField(default=0.0, help_text="Weighted total mark (scaled 0-10)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        unique_together = ('submission', 'judge')
+
+    def __str__(self):
+        return f"Score {self.total_score} by {self.judge.username} for {self.submission.title}"
+
+
+class EvaluationScore(models.Model):
+    evaluation = models.ForeignKey(
+        ProjectEvaluation,
+        on_delete=models.CASCADE,
+        related_name='scores',
+    )
+    rubric = models.ForeignKey(
+        EventRubric,
+        on_delete=models.CASCADE,
+        related_name='scores',
+    )
+    score = models.FloatField(help_text="Raw mark given by judge between 1 and 10")
+
+    class Meta:
+        unique_together = ('evaluation', 'rubric')
+
+    def __str__(self):
+        return f"{self.rubric.title}: {self.score}/10"
+
+
+class JudgeAssignment(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending Evaluation'
+        COMPLETED = 'COMPLETED', 'Evaluation Completed'
+        EXCUSED = 'EXCUSED', 'Excused / Reassigned'
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='judge_assignments')
+    judge = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='assigned_projects')
+    submission = models.ForeignKey(ProjectSubmission, on_delete=models.CASCADE, related_name='assigned_judges')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-assigned_at']
+        unique_together = ('judge', 'submission')
+
+    def __str__(self):
+        return f"Assignment: @{self.judge.username} -> {self.submission.title} ({self.status})"
+
+
+class EvaluationAuditLog(models.Model):
+    class Action(models.TextChoices):
+        CREATED = 'CREATED', 'Created'
+        UPDATED = 'UPDATED', 'Updated'
+        FLAGGED = 'FLAGGED', 'Flagged Outlier'
+
+    evaluation = models.ForeignKey(
+        ProjectEvaluation,
+        on_delete=models.CASCADE,
+        related_name='audit_trail',
+    )
+    judge = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='evaluation_audits',
+    )
+    submission = models.ForeignKey(
+        ProjectSubmission,
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+    )
+    action = models.CharField(max_length=20, choices=Action.choices, default=Action.CREATED)
+    score_delta = models.FloatField(default=0.0, help_text="Difference between new score and previous score")
+    snapshot_scores = models.JSONField(default=list, help_text="List of rubric scores at time of submission")
+    previous_scores = models.JSONField(null=True, blank=True)
+    feedback_text = models.TextField(blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default='')
+    is_outlier = models.BooleanField(default=False, help_text="Flagged if score diverges > 3.0 pts from consensus")
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"Audit [{self.action}] on {self.submission.title} by {self.judge.username if self.judge else 'Unknown'} at {self.timestamp}"
+
+

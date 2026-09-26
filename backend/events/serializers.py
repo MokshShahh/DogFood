@@ -1,6 +1,57 @@
 from rest_framework import serializers
-from .models import Event, Team, TeamMember, ProjectSubmission, Track, Prize, EventPhase
+from .models import (
+    Event,
+    Team,
+    TeamMember,
+    ProjectSubmission,
+    Track,
+    Prize,
+    EventPhase,
+    EventRubric,
+    ProjectEvaluation,
+    EvaluationScore,
+)
 
+
+class EventRubricSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = EventRubric
+        fields = ['id', 'title', 'description', 'weight', 'max_score']
+
+
+class EvaluationScoreSerializer(serializers.ModelSerializer):
+    rubric_title = serializers.CharField(source='rubric.title', read_only=True)
+    rubric_weight = serializers.FloatField(source='rubric.weight', read_only=True)
+
+    class Meta:
+        model = EvaluationScore
+        fields = ['id', 'rubric', 'rubric_title', 'rubric_weight', 'score']
+
+
+class ProjectEvaluationSerializer(serializers.ModelSerializer):
+    judge_username = serializers.CharField(source='judge.username', read_only=True)
+    scores = EvaluationScoreSerializer(many=True, read_only=True)
+    team_name = serializers.CharField(source='submission.team.name', read_only=True)
+    submission_title = serializers.CharField(source='submission.title', read_only=True)
+
+    class Meta:
+        model = ProjectEvaluation
+        fields = [
+            'id',
+            'submission',
+            'submission_title',
+            'team_name',
+            'judge',
+            'judge_username',
+            'feedback',
+            'total_score',
+            'scores',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'submission', 'judge', 'total_score', 'created_at', 'updated_at']
 
 
 class TrackSerializer(serializers.ModelSerializer):
@@ -122,6 +173,7 @@ class JoinTeamSerializer(serializers.Serializer):
 class EventListSerializer(serializers.ModelSerializer):
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     teams_count = serializers.IntegerField(read_only=True)
+    rubrics = EventRubricSerializer(many=True, read_only=True)
     event_judges = serializers.SerializerMethodField()
 
     class Meta:
@@ -141,6 +193,7 @@ class EventListSerializer(serializers.ModelSerializer):
             'created_by_username',
             'created_at',
             'teams_count',
+            'rubrics',
             'event_judges',
             'require_github_url',
             'require_demo_url',
@@ -161,6 +214,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     phases = EventPhaseSerializer(many=True, read_only=True)
     tracks = TrackSerializer(many=True, read_only=True)
     prizes = PrizeSerializer(many=True, read_only=True)
+    rubrics = EventRubricSerializer(many=True, read_only=True)
     event_judges = serializers.SerializerMethodField()
 
     class Meta:
@@ -185,6 +239,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'phases',
             'tracks',
             'prizes',
+            'rubrics',
             'event_judges',
             'require_github_url',
             'require_demo_url',
@@ -219,6 +274,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
     phases = EventPhaseSerializer(many=True, required=False)
     tracks = TrackSerializer(many=True, required=False)
     prizes = PrizeSerializer(many=True, required=False)
+    rubrics = EventRubricSerializer(many=True, required=False)
 
     class Meta:
         model = Event
@@ -236,6 +292,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
             'phases',
             'tracks',
             'prizes',
+            'rubrics',
             'require_github_url',
             'require_demo_url',
             'require_presentation',
@@ -254,6 +311,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
         phases_data = validated_data.pop('phases', [])
         tracks_data = validated_data.pop('tracks', [])
         prizes_data = validated_data.pop('prizes', [])
+        rubrics_data = validated_data.pop('rubrics', [])
         
         event = Event.objects.create(**validated_data)
         
@@ -263,6 +321,8 @@ class EventCreateSerializer(serializers.ModelSerializer):
             Track.objects.create(event=event, **track_data)
         for prize_data in prizes_data:
             Prize.objects.create(event=event, **prize_data)
+        for rubric_data in rubrics_data:
+            EventRubric.objects.create(event=event, **rubric_data)
             
         return event
 
@@ -270,6 +330,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
         phases_data = validated_data.pop('phases', None)
         tracks_data = validated_data.pop('tracks', None)
         prizes_data = validated_data.pop('prizes', None)
+        rubrics_data = validated_data.pop('rubrics', None)
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -289,5 +350,23 @@ class EventCreateSerializer(serializers.ModelSerializer):
             instance.prizes.all().delete()
             for prize_data in prizes_data:
                 Prize.objects.create(event=instance, **prize_data)
+
+        if rubrics_data is not None:
+            existing_rubrics = {r.id: r for r in instance.rubrics.all()}
+            kept_ids = []
+            for rubric_data in rubrics_data:
+                rubric_id = rubric_data.get('id')
+                if rubric_id and rubric_id in existing_rubrics:
+                    r = existing_rubrics[rubric_id]
+                    r.title = rubric_data.get('title', r.title)
+                    r.description = rubric_data.get('description', r.description)
+                    r.weight = rubric_data.get('weight', r.weight)
+                    r.max_score = rubric_data.get('max_score', r.max_score)
+                    r.save()
+                    kept_ids.append(r.id)
+                else:
+                    new_r = EventRubric.objects.create(event=instance, **rubric_data)
+                    kept_ids.append(new_r.id)
+            instance.rubrics.exclude(id__in=kept_ids).delete()
         
         return instance

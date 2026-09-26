@@ -16,6 +16,13 @@ from .views import (
     MySubmissionView,
     EventSubmissionsListView,
     PublicGalleryView,
+    EventRubricsManageView,
+    SubmitProjectEvaluationView,
+    EventLeaderboardView,
+    AdminAssignJudgesView,
+    AdminJudgingProgressView,
+    AdminExportLeaderboardCSVView,
+    AdminExportRubricsCSVView,
 )
 
 urlpatterns = [
@@ -28,6 +35,14 @@ urlpatterns = [
     path('<int:pk>/my-submission/', MySubmissionView.as_view(), name='my_submission'),
     path('<int:pk>/submissions/', EventSubmissionsListView.as_view(), name='event_submissions'),
     path('<int:pk>/gallery/', PublicGalleryView.as_view(), name='event_gallery'),
+    path('<int:pk>/rubrics/', EventRubricsManageView.as_view(), name='event_rubrics'),
+    path('<int:pk>/rubrics/<int:rubric_pk>/', EventRubricsManageView.as_view(), name='event_rubric_detail'),
+    path('<int:event_pk>/submissions/<int:sub_pk>/evaluate/', SubmitProjectEvaluationView.as_view(), name='submission_evaluate'),
+    path('<int:pk>/leaderboard/', EventLeaderboardView.as_view(), name='event_leaderboard'),
+    path('<int:pk>/admin/assign-judges/', AdminAssignJudgesView.as_view(), name='admin_assign_judges'),
+    path('<int:pk>/admin/judging-progress/', AdminJudgingProgressView.as_view(), name='admin_judging_progress'),
+    path('<int:pk>/admin/export/leaderboard-csv/', AdminExportLeaderboardCSVView.as_view(), name='admin_export_leaderboard_csv'),
+    path('<int:pk>/admin/export/rubrics-csv/', AdminExportRubricsCSVView.as_view(), name='admin_export_rubrics_csv'),
 
     path('admin/events/<int:pk>/', AdminEventManageView.as_view(), name='admin_event_manage'),
     path('admin/events/<int:pk>/judges/', AdminEventJudgeManageView.as_view(), name='admin_event_judge_manage'),

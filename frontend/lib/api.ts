@@ -82,6 +82,79 @@ export interface ProjectSubmission {
   track: number | null
 }
 
+export interface EventRubric {
+  id?: number
+  title: string
+  description?: string
+  weight: number
+  max_score?: number
+}
+
+export interface EvaluationScoreItem {
+  id?: number
+  rubric: number
+  rubric_title?: string
+  rubric_weight?: number
+  score: number
+}
+
+export interface ProjectEvaluation {
+  id: number
+  submission: number
+  submission_title: string
+  team_name: string
+  judge: number
+  judge_username: string
+  feedback: string
+  total_score: number
+  scores: EvaluationScoreItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface LeaderboardEntry {
+  submission_id: number
+  submission_title: string
+  team_name: string
+  tagline: string
+  track: number | null
+  average_score: number | null
+  normalized_score?: number | null
+  raw_score?: number | null
+  standard_error?: number | null
+  evaluations_count: number
+  evaluations: ProjectEvaluation[]
+}
+
+export interface JudgingProgressSummary {
+  total_submissions: number
+  total_judges: number
+  total_assignments: number
+  completed_assignments: number
+  overall_progress_percent: number
+  under_reviewed_count: number
+}
+
+export interface JudgeProgressItem {
+  judge_id: number
+  username: string
+  assigned: number
+  completed: number
+  progress_percent: number
+}
+
+export interface JudgingProgressResponse {
+  summary: JudgingProgressSummary
+  judges: JudgeProgressItem[]
+  under_reviewed_submissions: Array<{
+    submission_id: number
+    title: string
+    team_name: string
+    reviews_completed: number
+    target_reviews: number
+  }>
+}
+
 export interface Event {
   id: number
   title: string
@@ -102,6 +175,7 @@ export interface Event {
   tracks?: Track[]
   prizes?: Prize[]
   phases?: { id: number; title: string; start_date: string; end_date: string }[]
+  rubrics?: EventRubric[]
   require_github_url?: boolean
   require_demo_url?: boolean
   require_presentation?: boolean
@@ -342,4 +416,62 @@ export const api = {
 
   listEventSubmissions: (eventId: number | string) =>
     apiRequest<ProjectSubmission[]>(`/api/events/${eventId}/submissions/`),
+
+  // Rubrics & Judging Evaluation Endpoints
+  getEventRubrics: (eventId: number | string) =>
+    apiRequest<EventRubric[]>(`/api/events/${eventId}/rubrics/`),
+
+  createRubric: (eventId: number | string, data: Partial<EventRubric>) =>
+    apiRequest<EventRubric>(`/api/events/${eventId}/rubrics/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  deleteRubric: (eventId: number | string, rubricId: number) =>
+    apiRequest<{ message: string }>(`/api/events/${eventId}/rubrics/${rubricId}/`, {
+      method: "DELETE",
+    }),
+
+  submitEvaluation: (
+    eventId: number | string,
+    submissionId: number | string,
+    payload: { scores: { rubric_id: number; score: number }[]; feedback?: string }
+  ) =>
+    apiRequest<{ message: string; evaluation: ProjectEvaluation }>(
+      `/api/events/${eventId}/submissions/${submissionId}/evaluate/`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    ),
+
+  getMyEvaluation: (eventId: number | string, submissionId: number | string) =>
+    apiRequest<{ evaluated: boolean; evaluation: ProjectEvaluation | null }>(
+      `/api/events/${eventId}/submissions/${submissionId}/evaluate/`
+    ),
+
+  getLeaderboard: (eventId: number | string) =>
+    apiRequest<LeaderboardEntry[]>(`/api/events/${eventId}/leaderboard/`),
+
+  assignJudges: (eventId: number | string, k: number = 3) =>
+    apiRequest<{
+      success: boolean
+      total_submissions: number
+      total_judges: number
+      target_k: number
+      total_assignments_created: number
+      workload_distribution: Record<string, number>
+    }>(`/api/events/${eventId}/admin/assign-judges/`, {
+      method: "POST",
+      body: JSON.stringify({ k_per_project: k }),
+    }),
+
+  getJudgingProgress: (eventId: number | string) =>
+    apiRequest<JudgingProgressResponse>(`/api/events/${eventId}/admin/judging-progress/`),
+
+  getLeaderboardCsvUrl: (eventId: number | string) =>
+    `${getApiBaseUrl()}/api/events/${eventId}/admin/export/leaderboard-csv/`,
+
+  getRubricsCsvUrl: (eventId: number | string) =>
+    `${getApiBaseUrl()}/api/events/${eventId}/admin/export/rubrics-csv/`,
 }

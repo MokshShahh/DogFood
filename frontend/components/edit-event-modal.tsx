@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useState } from "react"
-import { api, Event } from "@/lib/api"
+import React, { useState, useEffect } from "react"
+import { api, Event, EventRubric } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { X, Loader2, Save, AlertCircle } from "lucide-react"
+import { X, Loader2, Save, AlertCircle, Plus, Trash2, Shield } from "lucide-react"
 
 interface EditEventModalProps {
   event: Event
@@ -34,10 +35,73 @@ export function EditEventModal({
     submission_guidelines: event.submission_guidelines || "",
   })
 
+  const [rubrics, setRubrics] = useState<EventRubric[]>(event.rubrics || [])
+  const [isFetchingRubrics, setIsFetchingRubrics] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!isOpen || !event?.id) return
+
+    setFormData({
+      title: event.title || "",
+      description: event.description || "",
+      mode: event.mode || "virtual",
+      location: event.location || "",
+      prize_pool: event.prize_pool || "",
+      max_team_size: event.max_team_size || 4,
+      require_github_url: Boolean(event.require_github_url),
+      require_demo_url: Boolean(event.require_demo_url),
+      require_presentation: Boolean(event.require_presentation),
+      submission_guidelines: event.submission_guidelines || "",
+    })
+
+    if (event.rubrics && event.rubrics.length > 0) {
+      setRubrics(event.rubrics)
+    }
+
+    const loadRubrics = async () => {
+      setIsFetchingRubrics(true)
+      try {
+        const fetchedRubrics = await api.getEventRubrics(event.id)
+        if (Array.isArray(fetchedRubrics)) {
+          setRubrics(fetchedRubrics)
+        }
+      } catch (err) {
+        console.error("Failed to fetch event rubrics:", err)
+      } finally {
+        setIsFetchingRubrics(false)
+      }
+    }
+
+    loadRubrics()
+  }, [isOpen, event?.id])
+
   if (!isOpen) return null
+
+  const totalWeight = rubrics.reduce((acc, r) => acc + (Number(r.weight) || 0), 0)
+
+  const handleAddRubric = () => {
+    setRubrics([
+      ...rubrics,
+      {
+        title: "",
+        description: "",
+        weight: 20,
+        max_score: 10,
+      },
+    ])
+  }
+
+  const handleRemoveRubric = (index: number) => {
+    setRubrics(rubrics.filter((_, idx) => idx !== index))
+  }
+
+  const handleRubricChange = (index: number, field: keyof EventRubric, val: any) => {
+    const updated = [...rubrics]
+    updated[index] = { ...updated[index], [field]: val }
+    setRubrics(updated)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,6 +120,13 @@ export function EditEventModal({
         require_demo_url: formData.require_demo_url,
         require_presentation: formData.require_presentation,
         submission_guidelines: formData.submission_guidelines,
+        rubrics: rubrics.map((r) => ({
+          ...(r.id ? { id: r.id } : {}),
+          title: r.title,
+          description: r.description || "",
+          weight: Number(r.weight) || 0,
+          max_score: 10,
+        })),
       })
       onUpdated(updated)
       onClose()
@@ -205,6 +276,104 @@ export function EditEventModal({
                 <span className="text-[11px] text-foreground">Slide Presentation</span>
               </label>
             </div>
+          </div>
+
+          {/* Judging Rubrics Configuration */}
+          <div className="space-y-3 pt-3 border-t border-border/30">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <Label className="text-xs text-foreground font-semibold flex items-center gap-1.5">
+                  <Shield className="size-3.5 text-amber-400" />
+                  Judging Rubrics & Scoring Weightage (1-10 Scale)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Define evaluation criteria and their percentage weights for judges.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-mono py-0.5 ${
+                    totalWeight === 100
+                      ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10"
+                      : "border-amber-500/30 text-amber-400 bg-amber-500/10"
+                  }`}
+                >
+                  Total: {totalWeight}%
+                </Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddRubric}
+                  className="h-7 text-[11px] font-mono hover:text-amber-400"
+                >
+                  <Plus className="size-3 mr-1" /> Add Rubric
+                </Button>
+              </div>
+            </div>
+
+            {isFetchingRubrics ? (
+              <div className="p-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-2 border border-border/20 rounded bg-muted/5 font-mono">
+                <Loader2 className="size-3.5 animate-spin text-amber-400" />
+                Loading event rubrics...
+              </div>
+            ) : rubrics.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground italic p-2 border border-border/20 rounded bg-muted/5">
+                No rubrics configured yet. Click &quot;Add Rubric&quot; to define criteria for judges.
+              </p>
+            ) : (
+              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                {rubrics.map((rubric, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-lg border border-border/30 bg-muted/10 space-y-2 text-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                      <div className="sm:col-span-8 space-y-1">
+                        <Input
+                          placeholder="Criterion Name (e.g. Technical Execution)"
+                          value={rubric.title}
+                          onChange={(e) => handleRubricChange(idx, "title", e.target.value)}
+                          className="h-7 text-xs font-mono"
+                          required
+                        />
+                      </div>
+                      <div className="sm:col-span-3 flex items-center gap-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          placeholder="Weight %"
+                          value={rubric.weight}
+                          onChange={(e) => handleRubricChange(idx, "weight", Number(e.target.value))}
+                          className="h-7 text-xs font-mono"
+                          required
+                        />
+                        <span className="text-[11px] text-muted-foreground">%</span>
+                      </div>
+                      <div className="sm:col-span-1 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRubric(idx)}
+                          className="text-muted-foreground hover:text-rose-400 p-1 cursor-pointer"
+                          title="Remove rubric"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <Input
+                      placeholder="Optional scoring instructions/rubric guideline for judges..."
+                      value={rubric.description || ""}
+                      onChange={(e) => handleRubricChange(idx, "description", e.target.value)}
+                      className="h-7 text-[11px] font-mono text-muted-foreground"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Guidelines */}

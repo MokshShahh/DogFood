@@ -40,6 +40,8 @@ import {
   Target,
   FileText,
   MapPin,
+  Scale,
+  BarChart3,
 } from "lucide-react"
 
 function GithubIcon({ className }: { className?: string }) {
@@ -135,6 +137,17 @@ export default function EventDetailPage({
   }, [eventId, user])
 
   const isCreatorOrAdmin = Boolean(user && (user.role === "admin" || user.id === event?.created_by))
+  const isJudge = Boolean(user && event?.event_judges?.some((j) => j.id === user.id))
+  const isReviewer = Boolean(
+    user &&
+      (["organizer", "judge", "admin"].includes(user.role) ||
+        user.id === event?.created_by ||
+        isJudge)
+  )
+  const totalRubricWeight = (event?.rubrics || []).reduce(
+    (acc, r) => acc + (Number(r.weight) || 0),
+    0
+  )
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -889,54 +902,199 @@ export default function EventDetailPage({
               </div>
 
               {/* Judges / Evaluation Panel */}
-              {(isCreatorOrAdmin || (event.event_judges && event.event_judges.length > 0)) && (
-                <div className="space-y-4 border-t border-border/30 pt-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
-                      <Shield className="size-4 text-primary" />
-                      Judging & Evaluation Panel ({event.event_judges?.length || 0})
-                    </h3>
-                    <span className="text-[11px] text-muted-foreground font-mono">
-                      {isCreatorOrAdmin ? "Organizer Controls" : "Project Reviewers"}
-                    </span>
+              {(isCreatorOrAdmin || isJudge || (event.event_judges && event.event_judges.length > 0) || (event.rubrics && event.rubrics.length > 0)) && (
+                <div className="space-y-6 border-t border-border/30 pt-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-2">
+                        <Scale className="size-4 text-primary" />
+                        Judging & Evaluation System
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Scoring criteria, appointed judges, and evaluation standings
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isCreatorOrAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsEditingModalOpen(true)}
+                          className="h-7 text-xs border-border/40 hover:border-primary/50 text-foreground"
+                        >
+                          <Edit2 className="size-3 mr-1.5" />
+                          Edit Rubrics
+                        </Button>
+                      )}
+                      <Link
+                        href={`/events/${eventId}/gallery`}
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors font-mono py-1 px-2.5 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10"
+                      >
+                        <BarChart3 className="size-3" />
+                        Leaderboard & Projects
+                        <ArrowRight className="size-3" />
+                      </Link>
+                    </div>
                   </div>
 
-                  {isCreatorOrAdmin ? (
-                    <div className="p-4 rounded-lg border border-border/40 bg-muted/10 space-y-3">
-                      <p className="text-[11px] text-muted-foreground">
-                        Search and appoint judges for this contest from registered platform users:
-                      </p>
-                      <JudgeAppointmentCombobox
-                        eventId={event.id}
-                        currentJudges={event.event_judges || []}
-                        onJudgeAdded={() => fetchEvent()}
-                        onJudgeRemoved={() => fetchEvent()}
-                      />
+                  {/* Appointed Judges */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-mono font-medium text-muted-foreground uppercase flex items-center gap-1.5">
+                        <Shield className="size-3 text-primary" />
+                        Appointed Judges ({event.event_judges?.length || 0})
+                      </div>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {isCreatorOrAdmin ? "Organizer Controls" : "Evaluation Board"}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {event.event_judges?.map((judge) => (
-                        <div
-                          key={judge.id}
-                          className="p-3 rounded-lg border border-border/30 bg-muted/10 flex items-center gap-3"
-                        >
-                          <Avatar className="size-8 border border-border/40">
-                            <AvatarFallback className="text-[11px] font-mono font-semibold uppercase bg-muted/50">
-                              {judge.username.slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-semibold text-foreground truncate">
-                              @{judge.username}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
-                              <Shield className="size-2.5 text-primary" /> Judge
+
+                    {isCreatorOrAdmin ? (
+                      <div className="p-4 rounded-lg border border-border/40 bg-muted/10 space-y-3">
+                        <p className="text-[11px] text-muted-foreground">
+                          Search and appoint judges for this contest from registered platform users:
+                        </p>
+                        <JudgeAppointmentCombobox
+                          eventId={event.id}
+                          currentJudges={event.event_judges || []}
+                          onJudgeAdded={() => fetchEvent()}
+                          onJudgeRemoved={() => fetchEvent()}
+                        />
+                      </div>
+                    ) : event.event_judges && event.event_judges.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {event.event_judges.map((judge) => (
+                          <div
+                            key={judge.id}
+                            className="p-3 rounded-lg border border-border/30 bg-muted/10 flex items-center gap-3"
+                          >
+                            <Avatar className="size-8 border border-border/40">
+                              <AvatarFallback className="text-[11px] font-mono font-semibold uppercase bg-muted/50">
+                                {judge.username.slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-semibold text-foreground truncate">
+                                @{judge.username}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                                <Shield className="size-2.5 text-primary" /> Judge
+                              </div>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-lg border border-border/20 bg-muted/5 text-xs text-muted-foreground font-mono">
+                        No external judges appointed yet. Evaluations are handled by event organizers.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rubrics & Scoring Criteria */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-mono font-medium text-muted-foreground uppercase flex items-center gap-1.5">
+                        <Target className="size-3 text-primary" />
+                        Scoring Rubrics & Weightage ({event.rubrics?.length || 0})
+                      </div>
+                      {event.rubrics && event.rubrics.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`font-mono text-[10px] ${
+                              Math.round(totalRubricWeight) === 100
+                                ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                                : "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                            }`}
+                          >
+                            Total Weight: {totalRubricWeight}%
+                          </Badge>
+                          <Badge variant="outline" className="font-mono text-[10px] text-primary border-primary/30 bg-primary/10">
+                            1–10 Scale per Rubric
+                          </Badge>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
+
+                    {event.rubrics && event.rubrics.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {event.rubrics.map((rubric, idx) => (
+                            <div
+                              key={rubric.id || idx}
+                              className="p-3.5 rounded-lg border border-border/30 bg-muted/10 hover:border-border/60 transition-colors space-y-2 flex flex-col justify-between"
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h4 className="text-xs font-semibold text-foreground leading-snug">
+                                    {rubric.title}
+                                  </h4>
+                                  <Badge
+                                    variant="outline"
+                                    className="font-mono text-[10px] text-primary border-primary/30 bg-primary/10 shrink-0"
+                                  >
+                                    {rubric.weight}%
+                                  </Badge>
+                                </div>
+                                {rubric.description && (
+                                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-3">
+                                    {rubric.description}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="pt-2 border-t border-border/20 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                                <span>Max mark: 10</span>
+                                <span className="text-foreground/70">
+                                  Weight: {rubric.weight}%
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Weighted formula explanation */}
+                        <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] text-primary font-bold px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                              FORMULA
+                            </span>
+                            <span className="text-foreground/80 font-mono text-[11px]">
+                              Total Score = &Sigma; (Score &times; Weight / 100) &bull; Range: 0.0 – 10.0
+                            </span>
+                          </div>
+                          {(isReviewer || isJudge) && (
+                            <Link
+                              href={`/events/${eventId}/gallery`}
+                              className="inline-flex items-center gap-1 text-[11px] font-mono text-primary hover:underline font-semibold"
+                            >
+                              Evaluate Projects Now &rarr;
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-lg border border-border/30 bg-muted/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          {isCreatorOrAdmin
+                            ? "No custom rubrics configured yet. Add weighted rubrics (1-10 scale) so judges can evaluate submissions objectively."
+                            : "Standard 1-10 overall scoring applied by the judging panel."}
+                        </div>
+                        {isCreatorOrAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsEditingModalOpen(true)}
+                            className="text-xs font-mono h-7 border-border/40 hover:border-primary/50"
+                          >
+                            <PlusCircle className="size-3 mr-1.5" />
+                            Configure Rubrics
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

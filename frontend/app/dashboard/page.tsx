@@ -26,6 +26,8 @@ import {
   Trash2,
   Layers,
   ArrowRight,
+  Download,
+  Scale,
 } from "lucide-react"
 
 export default function DashboardPage() {
@@ -157,6 +159,18 @@ export default function DashboardPage() {
       loadDashboardData()
     } catch (err: any) {
       setActionError(err.message || "Failed to appoint judge.")
+    }
+  }
+
+  const handleAutoAssignJudges = async (eventId: number) => {
+    try {
+      const res = await api.assignJudges(eventId, 3)
+      setActionSuccess(
+        `Successfully allocated ${res.total_assignments_created} evaluations across ${res.total_judges} judges with zero COI violations.`
+      )
+      loadDashboardData()
+    } catch (err: any) {
+      setActionError(err.message || "Failed to auto-assign judges.")
     }
   }
 
@@ -400,6 +414,15 @@ export default function DashboardPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => window.open(api.getLeaderboardCsvUrl(ev.id), '_blank')}
+                                className="h-7 text-xs font-mono hover:text-emerald-400 border-border/40"
+                                title="Download Leaderboard Standings CSV"
+                              >
+                                <Download className="size-3 mr-1 text-emerald-400" /> CSV
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => setEditingEvent(ev)}
                                 className="h-7 text-xs font-mono hover:border-primary hover:text-primary"
                               >
@@ -416,8 +439,23 @@ export default function DashboardPage() {
                             </div>
                           </div>
 
-                          {/* Filterable Judge Appointment Section */}
-                          <div className="rounded-lg border border-border/30 bg-muted/10 p-3.5 space-y-2">
+                          {/* Filterable Judge Appointment & Allocation Section */}
+                          <div className="rounded-lg border border-border/30 bg-muted/10 p-3.5 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/20 pb-2">
+                              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                <Shield className="size-3.5 text-primary" />
+                                Judging Board & Allocation
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleAutoAssignJudges(ev.id)}
+                                className="h-6 text-[11px] font-mono border-primary/30 text-primary hover:bg-primary/10"
+                                title="Run load-balanced bipartite matching algorithm to allocate submissions to judges with zero COI violations"
+                              >
+                                <Scale className="size-3 mr-1" /> Auto-Assign Reviewers (K=3)
+                              </Button>
+                            </div>
                             <JudgeAppointmentCombobox
                               eventId={ev.id}
                               currentJudges={ev.event_judges || []}
